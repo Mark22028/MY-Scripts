@@ -1,0 +1,1614 @@
+--[[ 
+    Auto WallHop&Flick Script
+    By mark074271
+    
+    Features:
+    - WallHop+InfJump: Auto wallhop when jumping on walls with infinite jump
+    - WallHop: Auto wallhop only (no infinite jump)
+    - WallFlick+InfJump: Auto wallflick with shiftlock on with infinite jump
+    - WallFlick: Auto wallflick with shiftlock on (no infinite jump)
+]]
+
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
+
+-- Variables
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+local GuiEnabled = true
+local WallHopInfJumpEnabled = false
+local WallHopEnabled = false
+local WallFlickInfJumpEnabled = false
+local WallFlickEnabled = false
+
+-- Configuration
+local Config = {
+    -- Main Panel
+    PanelName = "Auto WallHop&Flick",
+    PanelSize = UDim2.new(0, 300, 0, 300),
+    PanelColor = Color3.fromRGB(100, 50, 150), -- Purple
+    PanelTransparency = 0.1,
+    PanelBorderColor = Color3.fromRGB(180, 100, 240), -- Violet glow
+    PanelCornerRadius = 16, -- Super duper ultra ultimate smooth round corner
+    InitialPosition = UDim2.new(0.5, -150, 0.5, -150),
+    
+    -- Buttons
+    ButtonHeight = 50,
+    ButtonSpacing = 10,
+    ButtonCornerRadius = 10,
+    ButtonTextSize = 16,
+    ButtonFont = Enum.Font.GothamSemibold,
+    DescriptionTextSize = 12,
+    DescriptionFont = Enum.Font.Gotham,
+    
+    -- Colors
+    TextColor = Color3.fromRGB(255, 255, 255),
+    HeaderColor = Color3.fromRGB(130, 70, 180),
+    ToggleOffColor = Color3.fromRGB(80, 40, 120),
+    ToggleOnColor = Color3.fromRGB(40, 180, 100), -- Green when enabled
+    
+    -- Animation
+    TweenTime = 0.3,
+    TweenStyle = Enum.EasingStyle.Quint,
+    TweenDirection = Enum.EasingDirection.Out,
+    FadeTime = 0.5,
+    
+    -- Spawn Animation (ULTRA SMOOTH)
+    SpawnAnimationTime = 0.8,
+    SpawnAnimationStyle = Enum.EasingStyle.Elastic,
+    SpawnAnimationDirection = Enum.EasingDirection.Out,
+    ElementSpawnDelay = 0.05, -- Delay between each element appearing
+    ElementFadeInTime = 0.4,
+    ElementScaleTime = 0.5,
+    ElementBounceMultiplier = 1.15, -- How much elements "bounce" when appearing
+    ElementRotationDegrees = 8, -- Slight rotation for elements when they appear
+    ShimmerSpeed = 1.5, -- Speed of the shimmering effect
+    
+    -- Enhanced Opening Animations
+    BlastRadius = 600, -- How far elements fly from their original position
+    SpinAmount = 720, -- Degrees of rotation during opening animation
+    DazzleColors = { -- Colors for the dazzle effect
+        Color3.fromRGB(180, 100, 255), -- Purple
+        Color3.fromRGB(130, 70, 230),  -- Darker purple
+        Color3.fromRGB(230, 100, 255), -- Pink-ish purple
+        Color3.fromRGB(100, 70, 200),  -- Blue-ish purple
+        Color3.fromRGB(180, 180, 255)  -- Light purple
+    },
+    PulseSpeed = 3, -- Speed of pulse effect
+    WaveSpeed = 2, -- Speed of wave effect
+    RippleCount = 5, -- Number of ripples
+    PulseSize = 1.2, -- Size multiplier for pulse effect
+    
+    -- Minimize Animation
+    MinimizeTime = 0.6,
+    MinimizeBounce = 0.3, -- How much bounce when minimizing
+    MinimizeRotation = 360, -- Degrees to rotate when minimizing
+    MinimizeStyle = Enum.EasingStyle.Back,
+    MinimizeDirection = Enum.EasingDirection.In
+    
+    -- Toggle Box
+    ToggleBoxSize = UDim2.new(0, 24, 0, 24),
+    ToggleBoxCornerRadius = 6,
+    
+    -- Wall Detection
+    WallCheckDistance = 1, -- Distance to check for walls (1 stud)
+    TurnDuration = 0.2, -- How long to keep char turned after wall hop
+}
+
+-- Function to create the main GUI
+local function CreateGui()
+    -- Container for the entire GUI
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "AutoWallHopFlickGui"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Check if CoreGui is available (more reliable for exploits)
+    local success, result = pcall(function()
+        if syn and syn.protect_gui then
+            syn.protect_gui(ScreenGui)
+            ScreenGui.Parent = game:GetService("CoreGui")
+            return true
+        elseif gethui then
+            ScreenGui.Parent = gethui()
+            return true
+        end
+        return false
+    end)
+    
+    if not success or not result then
+        ScreenGui.Parent = Player:WaitForChild("PlayerGui")
+    end
+    
+    -- Main Panel
+    local MainPanel = Instance.new("Frame")
+    MainPanel.Name = "MainPanel"
+    MainPanel.Size = Config.PanelSize
+    MainPanel.Position = Config.InitialPosition
+    MainPanel.BackgroundColor3 = Config.PanelColor
+    MainPanel.BackgroundTransparency = Config.PanelTransparency
+    MainPanel.BorderSizePixel = 0
+    MainPanel.Active = true
+    MainPanel.Parent = ScreenGui
+    
+    -- Add corner radius to panel
+    local PanelCorner = Instance.new("UICorner")
+    PanelCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    PanelCorner.Parent = MainPanel
+    
+    -- Add panel border with glow effect
+    local PanelBorder = Instance.new("UIStroke")
+    PanelBorder.Color = Config.PanelBorderColor
+    PanelBorder.Thickness = 2
+    PanelBorder.Parent = MainPanel
+    
+    -- Glowing effect for border
+    local GlowEffect = Instance.new("ImageLabel")
+    GlowEffect.Name = "GlowEffect"
+    GlowEffect.AnchorPoint = Vector2.new(0.5, 0.5)
+    GlowEffect.BackgroundTransparency = 1
+    GlowEffect.Position = UDim2.new(0.5, 0, 0.5, 0)
+    GlowEffect.Size = UDim2.new(1, 30, 1, 30)
+    GlowEffect.ZIndex = -1
+    GlowEffect.Image = "rbxassetid://6014261993"
+    GlowEffect.ImageColor3 = Config.PanelBorderColor
+    GlowEffect.ImageTransparency = 0.6
+    GlowEffect.ScaleType = Enum.ScaleType.Slice
+    GlowEffect.SliceCenter = Rect.new(49, 49, 450, 450)
+    GlowEffect.Parent = MainPanel
+    
+    -- Title bar for dragging
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Name = "TitleBar"
+    TitleBar.Size = UDim2.new(1, 0, 0, 40)
+    TitleBar.Position = UDim2.new(0, 0, 0, 0)
+    TitleBar.BackgroundColor3 = Config.HeaderColor
+    TitleBar.BackgroundTransparency = 0.2
+    TitleBar.BorderSizePixel = 0
+    TitleBar.Parent = MainPanel
+    
+    local TitleCorner = Instance.new("UICorner")
+    TitleCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    TitleCorner.Parent = TitleBar
+    
+    -- Header bottom corner fix
+    local HeaderFix = Instance.new("Frame")
+    HeaderFix.Name = "HeaderFix"
+    HeaderFix.Size = UDim2.new(1, 0, 0, 10)
+    HeaderFix.Position = UDim2.new(0, 0, 1, -10)
+    HeaderFix.BackgroundColor3 = Config.HeaderColor
+    HeaderFix.BackgroundTransparency = 0.2
+    HeaderFix.BorderSizePixel = 0
+    HeaderFix.ZIndex = 0
+    HeaderFix.Parent = TitleBar
+    
+    -- Title text
+    local TitleText = Instance.new("TextLabel")
+    TitleText.Name = "TitleText"
+    TitleText.Size = UDim2.new(1, -100, 1, 0)
+    TitleText.Position = UDim2.new(0, 15, 0, 0)
+    TitleText.BackgroundTransparency = 1
+    TitleText.TextColor3 = Config.TextColor
+    TitleText.TextSize = Config.ButtonTextSize + 4
+    TitleText.Font = Config.ButtonFont
+    TitleText.Text = Config.PanelName
+    TitleText.TextXAlignment = Enum.TextXAlignment.Left
+    TitleText.Parent = TitleBar
+    
+    -- Credit text
+    local CreditText = Instance.new("TextLabel")
+    CreditText.Name = "CreditText"
+    CreditText.Size = UDim2.new(1, -30, 0, 20)
+    CreditText.Position = UDim2.new(0, 15, 1, -25)
+    CreditText.BackgroundTransparency = 1
+    CreditText.TextColor3 = Config.TextColor
+    CreditText.TextSize = Config.DescriptionTextSize
+    CreditText.Font = Config.DescriptionFont
+    CreditText.Text = "By mark074271"
+    CreditText.TextXAlignment = Enum.TextXAlignment.Left
+    CreditText.Parent = MainPanel
+    
+    -- Minimize button
+    local MinimizeButton = Instance.new("TextButton")
+    MinimizeButton.Name = "MinimizeButton"
+    MinimizeButton.Size = UDim2.new(0, 30, 0, 30)
+    MinimizeButton.Position = UDim2.new(1, -70, 0, 5)
+    MinimizeButton.BackgroundColor3 = Color3.fromRGB(80, 40, 120)
+    MinimizeButton.TextColor3 = Config.TextColor
+    MinimizeButton.TextSize = Config.ButtonTextSize
+    MinimizeButton.Font = Config.ButtonFont
+    MinimizeButton.Text = "-"
+    MinimizeButton.BorderSizePixel = 0
+    MinimizeButton.Parent = TitleBar
+    
+    local MinimizeCorner = Instance.new("UICorner")
+    MinimizeCorner.CornerRadius = UDim.new(0, 6)
+    MinimizeCorner.Parent = MinimizeButton
+    
+    -- Close button
+    local CloseButton = Instance.new("TextButton")
+    CloseButton.Name = "CloseButton"
+    CloseButton.Size = UDim2.new(0, 30, 0, 30)
+    CloseButton.Position = UDim2.new(1, -35, 0, 5)
+    CloseButton.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    CloseButton.TextColor3 = Config.TextColor
+    CloseButton.TextSize = Config.ButtonTextSize
+    CloseButton.Font = Config.ButtonFont
+    CloseButton.Text = "x"
+    CloseButton.BorderSizePixel = 0
+    CloseButton.Parent = TitleBar
+    
+    local CloseCorner = Instance.new("UICorner")
+    CloseCorner.CornerRadius = UDim.new(0, 6)
+    CloseCorner.Parent = CloseButton
+    
+    -- Button container with scrolling frame
+    local ScrollFrame = Instance.new("ScrollingFrame")
+    ScrollFrame.Name = "ScrollFrame"
+    ScrollFrame.Size = UDim2.new(1, -20, 1, -85)
+    ScrollFrame.Position = UDim2.new(0, 10, 0, 50)
+    ScrollFrame.BackgroundTransparency = 1
+    ScrollFrame.BorderSizePixel = 0
+    ScrollFrame.ScrollBarThickness = 4
+    ScrollFrame.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
+    ScrollFrame.ScrollBarImageColor3 = Config.PanelBorderColor
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0) -- Will be updated dynamically
+    ScrollFrame.Parent = MainPanel
+    
+    -- Button layouts
+    local ButtonLayout = Instance.new("UIListLayout")
+    ButtonLayout.Padding = UDim.new(0, Config.ButtonSpacing)
+    ButtonLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ButtonLayout.Parent = ScrollFrame
+    
+    -- Create all toggle buttons
+    local function CreateToggleButton(name, description, layoutOrder)
+        local ButtonFrame = Instance.new("Frame")
+        ButtonFrame.Name = name .. "Frame"
+        ButtonFrame.Size = UDim2.new(1, 0, 0, Config.ButtonHeight)
+        ButtonFrame.BackgroundColor3 = Config.ToggleOffColor
+        ButtonFrame.BorderSizePixel = 0
+        ButtonFrame.LayoutOrder = layoutOrder
+        ButtonFrame.Parent = ScrollFrame
+        
+        local ButtonCorner = Instance.new("UICorner")
+        ButtonCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+        ButtonCorner.Parent = ButtonFrame
+        
+        local ButtonClickArea = Instance.new("TextButton")
+        ButtonClickArea.Name = "ClickArea"
+        ButtonClickArea.Size = UDim2.new(1, 0, 1, 0)
+        ButtonClickArea.BackgroundTransparency = 1
+        ButtonClickArea.Text = ""
+        ButtonClickArea.Parent = ButtonFrame
+        
+        local NameLabel = Instance.new("TextLabel")
+        NameLabel.Name = "NameLabel"
+        NameLabel.Size = UDim2.new(1, -50, 0, 25)
+        NameLabel.Position = UDim2.new(0, 15, 0, 5)
+        NameLabel.BackgroundTransparency = 1
+        NameLabel.TextColor3 = Config.TextColor
+        NameLabel.TextSize = Config.ButtonTextSize
+        NameLabel.Font = Config.ButtonFont
+        NameLabel.Text = name
+        NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        NameLabel.Parent = ButtonFrame
+        
+        local DescriptionLabel = Instance.new("TextLabel")
+        DescriptionLabel.Name = "DescriptionLabel"
+        DescriptionLabel.Size = UDim2.new(1, -50, 0, 20)
+        DescriptionLabel.Position = UDim2.new(0, 15, 0, 25)
+        DescriptionLabel.BackgroundTransparency = 1
+        DescriptionLabel.TextColor3 = Config.TextColor
+        DescriptionLabel.TextSize = Config.DescriptionTextSize
+        DescriptionLabel.Font = Config.DescriptionFont
+        DescriptionLabel.Text = description
+        DescriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
+        DescriptionLabel.TextTransparency = 0.2
+        DescriptionLabel.Parent = ButtonFrame
+        
+        -- Toggle box
+        local ToggleBox = Instance.new("Frame")
+        ToggleBox.Name = "ToggleBox"
+        ToggleBox.Size = Config.ToggleBoxSize
+        ToggleBox.Position = UDim2.new(1, -35, 0.5, -12)
+        ToggleBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        ToggleBox.BorderSizePixel = 0
+        ToggleBox.Parent = ButtonFrame
+        
+        local ToggleBoxCorner = Instance.new("UICorner")
+        ToggleBoxCorner.CornerRadius = UDim.new(0, Config.ToggleBoxCornerRadius)
+        ToggleBoxCorner.Parent = ToggleBox
+        
+        -- Toggle indicator (starts invisible)
+        local ToggleIndicator = Instance.new("Frame")
+        ToggleIndicator.Name = "ToggleIndicator"
+        ToggleIndicator.Size = UDim2.new(1, -4, 1, -4)
+        ToggleIndicator.Position = UDim2.new(0, 2, 0, 2)
+        ToggleIndicator.BackgroundColor3 = Config.ToggleOnColor
+        ToggleIndicator.BorderSizePixel = 0
+        ToggleIndicator.BackgroundTransparency = 1 -- Start transparent (OFF)
+        ToggleIndicator.Parent = ToggleBox
+        
+        local ToggleIndicatorCorner = Instance.new("UICorner")
+        ToggleIndicatorCorner.CornerRadius = UDim.new(0, Config.ToggleBoxCornerRadius - 2)
+        ToggleIndicatorCorner.Parent = ToggleIndicator
+        
+        return ButtonFrame, ButtonClickArea, ToggleIndicator
+    end
+    
+    -- Create all the toggle buttons
+    local WHIJButton, WHIJClick, WHIJIndicator = CreateToggleButton("WallHop+InfJump", "*With InfJump (Unshiftlock)*", 1)
+    local WHButton, WHClick, WHIndicator = CreateToggleButton("WallHop", "*No InfJump (Unshiftlock)*", 2)
+    local WFIJButton, WFIJClick, WFIJIndicator = CreateToggleButton("WallFlick+InfJump", "*With InfJump (ShiftlockOn)*", 3)
+    local WFButton, WFClick, WFIndicator = CreateToggleButton("WallFlick", "*No InfJump (ShiftlockOn)*", 4)
+    
+    -- Update the canvas size based on content
+    local function UpdateCanvasSize()
+        local contentHeight = ButtonLayout.AbsoluteContentSize.Y
+        ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
+    end
+    
+    UpdateCanvasSize()
+    ButtonLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateCanvasSize)
+    
+    -- Collect all elements for spawn animation
+    local animatableElements = {
+        -- Main elements
+        {element = MainPanel, initialPosition = Config.InitialPosition, initialRotation = 0},
+        {element = TitleBar, initialPosition = TitleBar.Position, initialRotation = 0},
+        {element = TitleText, initialPosition = TitleText.Position, initialRotation = 0},
+        {element = MinimizeButton, initialPosition = MinimizeButton.Position, initialRotation = 0},
+        {element = CloseButton, initialPosition = CloseButton.Position, initialRotation = 0},
+        {element = ScrollFrame, initialPosition = ScrollFrame.Position, initialRotation = 0},
+        {element = CreditText, initialPosition = CreditText.Position, initialRotation = 0},
+        
+        -- Toggle buttons
+        {element = WHIJButton, initialPosition = WHIJButton.Position, initialRotation = Config.ElementRotationDegrees},
+        {element = WHButton, initialPosition = WHButton.Position, initialRotation = -Config.ElementRotationDegrees},
+        {element = WFIJButton, initialPosition = WFIJButton.Position, initialRotation = Config.ElementRotationDegrees},
+        {element = WFButton, initialPosition = WFButton.Position, initialRotation = -Config.ElementRotationDegrees}
+    }
+    
+    -- Enhanced dragging functionality with smooth tweens
+    local Dragging = false
+    local DragStart = nil
+    local StartPos = nil
+    local LastMousePos = nil
+    local DragTween = nil
+    local MoveSpeed = Vector2.new(0, 0)
+    local LastMoveTime = 0
+    
+    -- Settings for drag tweens
+    local TweenDragSpeed = 0.1  -- How quickly the GUI follows the cursor
+    local BounceTime = 0.15     -- How long the bounce animation lasts when released
+    
+    -- Function to smoothly move the panel to a position
+    local function SmoothDragTo(targetPosition)
+        -- Cancel any existing tween
+        if DragTween and DragTween.PlaybackState == Enum.PlaybackState.Playing then
+            DragTween:Cancel()
+        end
+        
+        -- Create new smooth tween to target position
+        DragTween = TweenService:Create(
+            MainPanel,
+            TweenInfo.new(TweenDragSpeed, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+            {Position = targetPosition}
+        )
+        DragTween:Play()
+    end
+    
+    -- Function to create a bounce effect when dragging stops
+    local function CreateBounceEffect()
+        -- Calculate bounce direction based on movement speed
+        if MoveSpeed.Magnitude < 0.1 then return end
+        
+        -- Calculate bounce target (move slightly in direction of movement then back)
+        local bounceOffset = MoveSpeed * 5  -- Multiply by a factor to make the bounce noticeable
+        local currentPos = MainPanel.Position
+        
+        -- Cap the bounce to reasonable values
+        bounceOffset = Vector2.new(
+            math.clamp(bounceOffset.X, -20, 20),
+            math.clamp(bounceOffset.Y, -20, 20)
+        )
+        
+        -- Create bounce target position
+        local bouncePos = UDim2.new(
+            currentPos.X.Scale,
+            currentPos.X.Offset + bounceOffset.X,
+            currentPos.Y.Scale,
+            currentPos.Y.Offset + bounceOffset.Y
+        )
+        
+        -- First tween: Quick bounce in the direction of movement
+        local bounceTween = TweenService:Create(
+            MainPanel,
+            TweenInfo.new(BounceTime * 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {Position = bouncePos}
+        )
+        
+        -- Second tween: Settle back to the current position
+        local settleTween = TweenService:Create(
+            MainPanel,
+            TweenInfo.new(BounceTime * 0.7, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+            {Position = currentPos}
+        )
+        
+        -- Play the sequence
+        bounceTween:Play()
+        bounceTween.Completed:Connect(function()
+            settleTween:Play()
+        end)
+    end
+    
+    TitleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            -- Cancel any active tweens
+            if DragTween and DragTween.PlaybackState == Enum.PlaybackState.Playing then
+                DragTween:Cancel()
+            end
+            
+            Dragging = true
+            DragStart = input.Position
+            StartPos = MainPanel.Position
+            LastMousePos = input.Position
+            LastMoveTime = tick()
+            MoveSpeed = Vector2.new(0, 0)
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if Dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local currentTime = tick()
+            local deltaTime = currentTime - LastMoveTime
+            
+            -- Skip if delta time is too small to avoid division by zero
+            if deltaTime > 0.001 then
+                local currentMousePos = input.Position
+                
+                -- Calculate instantaneous velocity
+                local mouseVelocity = (currentMousePos - LastMousePos) / deltaTime
+                
+                -- Update movement speed with some smoothing
+                MoveSpeed = MoveSpeed:Lerp(Vector2.new(mouseVelocity.X, mouseVelocity.Y), 0.3)
+                
+                -- Update tracking variables
+                LastMousePos = currentMousePos
+                LastMoveTime = currentTime
+            end
+            
+            local Delta = input.Position - DragStart
+            local targetPosition = UDim2.new(
+                StartPos.X.Scale, 
+                StartPos.X.Offset + Delta.X,
+                StartPos.Y.Scale, 
+                StartPos.Y.Offset + Delta.Y
+            )
+            
+            -- Smoothly move to the target position
+            SmoothDragTo(targetPosition)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch and Dragging then
+            Dragging = false
+            
+            -- Apply bounce effect based on movement speed
+            CreateBounceEffect()
+            
+            -- Reset movement tracking
+            task.delay(BounceTime, function()
+                MoveSpeed = Vector2.new(0, 0)
+            end)
+        end
+    end)
+    
+    -- Minimize/Maximize Button Functionality
+    local ContentVisible = true
+    
+    local function ToggleMinimize()
+        ContentVisible = not ContentVisible
+        
+        -- Create particles on minimize/maximize
+        for i = 1, 10 do
+            local particle = Instance.new("Frame")
+            particle.Name = "MinimizeParticle" .. i
+            particle.Size = UDim2.new(0, math.random(2, 6), 0, math.random(2, 6))
+            particle.Position = UDim2.new(0, MinimizeButton.AbsolutePosition.X + MinimizeButton.AbsoluteSize.X/2, 
+                                          0, MinimizeButton.AbsolutePosition.Y + MinimizeButton.AbsoluteSize.Y/2)
+            particle.AnchorPoint = Vector2.new(0.5, 0.5)
+            particle.BackgroundColor3 = Config.DazzleColors[math.random(1, #Config.DazzleColors)]
+            particle.BackgroundTransparency = 0.2
+            particle.BorderSizePixel = 0
+            particle.ZIndex = 101
+            particle.Parent = ScreenGui
+            
+            -- Make it circular
+            local particleCorner = Instance.new("UICorner")
+            particleCorner.CornerRadius = UDim.new(1, 0)
+            particleCorner.Parent = particle
+            
+            -- Animate the particle
+            local angle = math.rad(math.random(0, 360))
+            local distance = math.random(20, 60)
+            local targetX = math.cos(angle) * distance
+            local targetY = math.sin(angle) * distance
+            
+            local particleTween = TweenService:Create(
+                particle,
+                TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {
+                    Position = UDim2.new(0, particle.Position.X.Offset + targetX, 
+                                         0, particle.Position.Y.Offset + targetY),
+                    Size = UDim2.new(0, 0, 0, 0),
+                    BackgroundTransparency = 1,
+                    Rotation = math.random(180, 360)
+                }
+            )
+            particleTween:Play()
+            
+            particleTween.Completed:Connect(function()
+                particle:Destroy()
+            end)
+        end
+        
+        -- Update button text with animation
+        if ContentVisible then
+            -- Animate from + to -
+            MinimizeButton.Text = ""
+            
+            -- Create + to - animation
+            local horizontal = Instance.new("Frame")
+            horizontal.Name = "HorizontalBar"
+            horizontal.Size = UDim2.new(0, 12, 0, 2)
+            horizontal.Position = UDim2.new(0.5, -6, 0.5, -1)
+            horizontal.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            horizontal.BorderSizePixel = 0
+            horizontal.Parent = MinimizeButton
+            
+            -- Vertical bar fades out and rotates
+            local vertical = Instance.new("Frame")
+            vertical.Name = "VerticalBar"
+            vertical.Size = UDim2.new(0, 2, 0, 12)
+            vertical.Position = UDim2.new(0.5, -1, 0.5, -6)
+            vertical.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            vertical.BorderSizePixel = 0
+            vertical.Parent = MinimizeButton
+            
+            -- Animate vertical bar fade out
+            local verticalTween = TweenService:Create(
+                vertical,
+                TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {
+                    Size = UDim2.new(0, 2, 0, 0),
+                    Position = UDim2.new(0.5, -1, 0.5, 0),
+                    BackgroundTransparency = 1,
+                    Rotation = 90
+                }
+            )
+            verticalTween:Play()
+            
+            verticalTween.Completed:Connect(function()
+                vertical:Destroy()
+                MinimizeButton.Text = "-"
+            end)
+            
+            task.delay(0.35, function()
+                if horizontal and horizontal.Parent then
+                    horizontal:Destroy()
+                end
+            end)
+        else
+            -- Animate from - to +
+            MinimizeButton.Text = ""
+            
+            -- Create - to + animation
+            local horizontal = Instance.new("Frame")
+            horizontal.Name = "HorizontalBar"
+            horizontal.Size = UDim2.new(0, 12, 0, 2)
+            horizontal.Position = UDim2.new(0.5, -6, 0.5, -1)
+            horizontal.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            horizontal.BorderSizePixel = 0
+            horizontal.Parent = MinimizeButton
+            
+            -- Create and animate vertical bar appearing
+            local vertical = Instance.new("Frame")
+            vertical.Name = "VerticalBar"
+            vertical.Size = UDim2.new(0, 2, 0, 0)
+            vertical.Position = UDim2.new(0.5, -1, 0.5, 0)
+            vertical.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            vertical.BackgroundTransparency = 1
+            vertical.BorderSizePixel = 0
+            vertical.Rotation = 90
+            vertical.Parent = MinimizeButton
+            
+            -- Animate vertical bar appearance
+            local verticalTween = TweenService:Create(
+                vertical,
+                TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {
+                    Size = UDim2.new(0, 2, 0, 12),
+                    Position = UDim2.new(0.5, -1, 0.5, -6),
+                    BackgroundTransparency = 0,
+                    Rotation = 0
+                }
+            )
+            verticalTween:Play()
+            
+            verticalTween.Completed:Connect(function()
+                task.delay(0.1, function()
+                    if vertical and vertical.Parent then vertical:Destroy() end
+                    if horizontal and horizontal.Parent then horizontal:Destroy() end
+                    MinimizeButton.Text = "+"
+                end)
+            end)
+        end
+        
+        -- Create spectacular animation for minimizing/maximizing
+        if ContentVisible then
+            -- MAXIMIZING ANIMATION
+            
+            -- First, quick "pop" effect
+            local popTween = TweenService:Create(
+                MainPanel,
+                TweenInfo.new(Config.MinimizeTime * 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                {
+                    Size = UDim2.new(0, Config.PanelSize.X.Offset, 0, 80)
+                }
+            )
+            
+            -- Then expand to full size with bounce
+            local expandTween = TweenService:Create(
+                MainPanel, 
+                TweenInfo.new(
+                    Config.MinimizeTime * 0.7,
+                    Config.MinimizeStyle,
+                    Enum.EasingDirection.Out,
+                    0, -- No repeats
+                    false, -- Don't reverse
+                    0 -- No delay
+                ),
+                {
+                    Size = Config.PanelSize
+                }
+            )
+            
+            -- Create a flash effect
+            local flash = Instance.new("Frame")
+            flash.Name = "MinimizeFlash"
+            flash.Size = UDim2.new(1, 0, 1, 0)
+            flash.BackgroundColor3 = Config.PanelBorderColor
+            flash.BackgroundTransparency = 0.8
+            flash.BorderSizePixel = 0
+            flash.ZIndex = 10
+            
+            -- Make it obey the panel corners
+            local flashCorner = Instance.new("UICorner")
+            flashCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+            flashCorner.Parent = flash
+            
+            -- Play sequence
+            popTween:Play()
+            popTween.Completed:Connect(function()
+                -- Add flash when expanding
+                flash.Parent = MainPanel
+                
+                -- Fade out flash
+                local flashTween = TweenService:Create(
+                    flash,
+                    TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    {BackgroundTransparency = 1}
+                )
+                flashTween:Play()
+                
+                flashTween.Completed:Connect(function()
+                    flash:Destroy()
+                end)
+                
+                -- Start expanding
+                expandTween:Play()
+                
+                -- Fade in content elements
+                for _, element in ipairs({ScrollFrame, CreditText}) do
+                    element.Visible = true
+                    if element:IsA("TextLabel") then
+                        element.TextTransparency = 1
+                        TweenService:Create(
+                            element,
+                            TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                            {TextTransparency = 0}
+                        ):Play()
+                    else
+                        element.BackgroundTransparency = 1
+                        TweenService:Create(
+                            element,
+                            TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                            {BackgroundTransparency = 0}
+                        ):Play()
+                    end
+                end
+                
+                -- Add staggered fade-in for buttons
+                for i, button in ipairs(ScrollFrame:GetChildren()) do
+                    if button:IsA("Frame") then
+                        button.BackgroundTransparency = 1
+                        
+                        task.delay(i * 0.05, function()
+                            -- Slide in from right
+                            button.Position = UDim2.new(1, 0, button.Position.Y.Scale, button.Position.Y.Offset)
+                            
+                            -- Animate position and transparency
+                            TweenService:Create(
+                                button,
+                                TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                                {
+                                    Position = UDim2.new(0, 0, button.Position.Y.Scale, button.Position.Y.Offset),
+                                    BackgroundTransparency = 0
+                                }
+                            ):Play()
+                        end)
+                    end
+                end
+            end)
+        else
+            -- MINIMIZING ANIMATION
+            
+            -- Hide content with quick fade
+            for _, element in ipairs({ScrollFrame, CreditText}) do
+                if element:IsA("TextLabel") then
+                    TweenService:Create(
+                        element,
+                        TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                        {TextTransparency = 1}
+                    ):Play()
+                else
+                    TweenService:Create(
+                        element,
+                        TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                        {BackgroundTransparency = 1}
+                    ):Play()
+                end
+            end
+            
+            -- Add staggered fade-out for buttons
+            for i, button in ipairs(ScrollFrame:GetChildren()) do
+                if button:IsA("Frame") then
+                    task.delay(i * 0.03, function()
+                        -- Animate transparency and slide out to right
+                        TweenService:Create(
+                            button,
+                            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                            {
+                                Position = UDim2.new(1, 0, button.Position.Y.Scale, button.Position.Y.Offset),
+                                BackgroundTransparency = 1
+                            }
+                        ):Play()
+                    end)
+                end
+            end
+            
+            -- Wait a moment for content to fade
+            task.delay(0.25, function()
+                -- Set visibility after fade completes
+                ScrollFrame.Visible = false
+                CreditText.Visible = false
+                
+                -- Create shrink with rotation animation
+                local shrinkTween = TweenService:Create(
+                    MainPanel,
+                    TweenInfo.new(
+                        Config.MinimizeTime,
+                        Config.MinimizeStyle,
+                        Config.MinimizeDirection
+                    ),
+                    {
+                        Size = UDim2.new(0, Config.PanelSize.X.Offset, 0, 40),
+                        Rotation = ContentVisible and 0 or math.random(-8, 8) -- Slight tilt when minimized
+                    }
+                )
+                
+                shrinkTween:Play()
+                
+                -- Create a wave effect along the panel when minimizing
+                local wave = Instance.new("Frame")
+                wave.Name = "MinimizeWave"
+                wave.Size = UDim2.new(1, 0, 0, 40)
+                wave.BackgroundColor3 = Config.PanelBorderColor
+                wave.BackgroundTransparency = 0.8
+                wave.BorderSizePixel = 0
+                wave.Position = UDim2.new(0, 0, 0, 0)
+                wave.ZIndex = 10
+                wave.ClipsDescendants = true
+                wave.Parent = MainPanel
+                
+                local waveTween = TweenService:Create(
+                    wave,
+                    TweenInfo.new(Config.MinimizeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    {
+                        Position = UDim2.new(0, 0, 1, 0),
+                        BackgroundTransparency = 1
+                    }
+                )
+                waveTween:Play()
+                
+                waveTween.Completed:Connect(function()
+                    wave:Destroy()
+                end)
+            end)
+        end
+    end
+    
+    MinimizeButton.MouseButton1Click:Connect(ToggleMinimize)
+    
+    -- Close Button Functionality
+    local function CloseGui()
+        -- Disable all functions
+        WallHopInfJumpEnabled = false
+        WallHopEnabled = false
+        WallFlickInfJumpEnabled = false
+        WallFlickEnabled = false
+        GuiEnabled = false
+        
+        -- Create fade out animation
+        local tweenInfo = TweenInfo.new(Config.FadeTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local fadeTween = TweenService:Create(ScreenGui, tweenInfo, {BackgroundTransparency = 1})
+        
+        -- Add transparency to all elements
+        for _, obj in pairs(ScreenGui:GetDescendants()) do
+            if obj:IsA("Frame") or obj:IsA("TextButton") or obj:IsA("TextLabel") or obj:IsA("ImageLabel") then
+                local startingTransparency = obj.BackgroundTransparency
+                TweenService:Create(obj, tweenInfo, {BackgroundTransparency = 1}):Play()
+                
+                if obj:IsA("TextButton") or obj:IsA("TextLabel") then
+                    local startingTextTransparency = obj.TextTransparency
+                    TweenService:Create(obj, tweenInfo, {TextTransparency = 1}):Play()
+                end
+                
+                if obj:IsA("ImageLabel") then
+                    local startingImageTransparency = obj.ImageTransparency
+                    TweenService:Create(obj, tweenInfo, {ImageTransparency = 1}):Play()
+                end
+            end
+        end
+        
+        -- Wait for fade to finish then destroy
+        task.delay(Config.FadeTime, function()
+            if ScreenGui and ScreenGui.Parent then
+                ScreenGui:Destroy()
+            end
+        end)
+    end
+    
+    CloseButton.MouseButton1Click:Connect(CloseGui)
+    
+    -- Toggle Button Functionality
+    local function SetToggleState(indicator, enabled)
+        local targetTransparency = enabled and 0 or 1
+        local tweenInfo = TweenInfo.new(Config.TweenTime / 2, Config.TweenStyle, Config.TweenDirection)
+        local colorTween = TweenService:Create(indicator, tweenInfo, {BackgroundTransparency = targetTransparency})
+        colorTween:Play()
+    end
+    
+    WHIJClick.MouseButton1Click:Connect(function()
+        WallHopInfJumpEnabled = not WallHopInfJumpEnabled
+        
+        -- Turn off other toggles if this one is enabled
+        if WallHopInfJumpEnabled then
+            WallHopEnabled = false
+            WallFlickInfJumpEnabled = false
+            WallFlickEnabled = false
+            
+            SetToggleState(WHIndicator, false)
+            SetToggleState(WFIJIndicator, false)
+            SetToggleState(WFIndicator, false)
+        end
+        
+        SetToggleState(WHIJIndicator, WallHopInfJumpEnabled)
+    end)
+    
+    WHClick.MouseButton1Click:Connect(function()
+        WallHopEnabled = not WallHopEnabled
+        
+        -- Turn off other toggles if this one is enabled
+        if WallHopEnabled then
+            WallHopInfJumpEnabled = false
+            WallFlickInfJumpEnabled = false
+            WallFlickEnabled = false
+            
+            SetToggleState(WHIJIndicator, false)
+            SetToggleState(WFIJIndicator, false)
+            SetToggleState(WFIndicator, false)
+        end
+        
+        SetToggleState(WHIndicator, WallHopEnabled)
+    end)
+    
+    WFIJClick.MouseButton1Click:Connect(function()
+        WallFlickInfJumpEnabled = not WallFlickInfJumpEnabled
+        
+        -- Turn off other toggles if this one is enabled
+        if WallFlickInfJumpEnabled then
+            WallHopInfJumpEnabled = false
+            WallHopEnabled = false
+            WallFlickEnabled = false
+            
+            SetToggleState(WHIJIndicator, false)
+            SetToggleState(WHIndicator, false)
+            SetToggleState(WFIndicator, false)
+        end
+        
+        SetToggleState(WFIJIndicator, WallFlickInfJumpEnabled)
+    end)
+    
+    WFClick.MouseButton1Click:Connect(function()
+        WallFlickEnabled = not WallFlickEnabled
+        
+        -- Turn off other toggles if this one is enabled
+        if WallFlickEnabled then
+            WallHopInfJumpEnabled = false
+            WallHopEnabled = false
+            WallFlickInfJumpEnabled = false
+            
+            SetToggleState(WHIJIndicator, false)
+            SetToggleState(WHIndicator, false)
+            SetToggleState(WFIJIndicator, false)
+        end
+        
+        SetToggleState(WFIndicator, WallFlickEnabled)
+    end)
+    
+    -- ===== ULTRA SMOOTH SPAWN ANIMATIONS =====
+    
+    -- Function to play spawn animation for all elements
+    local function PlaySpawnAnimations()
+        -- Create the explosion effect container
+        local ExplosionEffect = Instance.new("Frame")
+        ExplosionEffect.Name = "ExplosionEffect"
+        ExplosionEffect.Size = UDim2.new(0, 0, 0, 0)
+        ExplosionEffect.Position = UDim2.new(0.5, 0, 0.5, 0)
+        ExplosionEffect.AnchorPoint = Vector2.new(0.5, 0.5)
+        ExplosionEffect.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        ExplosionEffect.BackgroundTransparency = 0.8
+        ExplosionEffect.BorderSizePixel = 0
+        ExplosionEffect.ZIndex = 100
+        ExplosionEffect.Parent = ScreenGui
+        
+        local ExplosionCorner = Instance.new("UICorner")
+        ExplosionCorner.CornerRadius = UDim.new(1, 0) -- Make it perfectly circular
+        ExplosionCorner.Parent = ExplosionEffect
+        
+        -- Create an explosion effect gradient
+        local ExplosionGradient = Instance.new("UIGradient")
+        ExplosionGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+            ColorSequenceKeypoint.new(0.6, Config.PanelBorderColor),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 30, 30))
+        })
+        ExplosionGradient.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.2),
+            NumberSequenceKeypoint.new(0.8, 0.8),
+            NumberSequenceKeypoint.new(1, 1)
+        })
+        ExplosionGradient.Parent = ExplosionEffect
+        
+        -- Create the initial explosion effect
+        local explosionTween = TweenService:Create(
+            ExplosionEffect,
+            TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+            {
+                Size = UDim2.new(0, Config.BlastRadius * 2, 0, Config.BlastRadius * 2),
+                BackgroundTransparency = 1
+            }
+        )
+        explosionTween:Play()
+        
+        explosionTween.Completed:Connect(function()
+            ExplosionEffect:Destroy()
+        end)
+        
+        -- Create dazzle particles
+        for i = 1, 20 do
+            local particle = Instance.new("Frame")
+            particle.Name = "DazzleParticle" .. i
+            particle.Size = UDim2.new(0, math.random(5, 15), 0, math.random(5, 15))
+            particle.Position = UDim2.new(0.5, 0, 0.5, 0)
+            particle.AnchorPoint = Vector2.new(0.5, 0.5)
+            particle.BackgroundColor3 = Config.DazzleColors[math.random(1, #Config.DazzleColors)]
+            particle.BackgroundTransparency = 0.2
+            particle.BorderSizePixel = 0
+            particle.ZIndex = 99
+            particle.Rotation = math.random(0, 360)
+            particle.Parent = ScreenGui
+            
+            -- Shape
+            local particleCorner = Instance.new("UICorner")
+            particleCorner.CornerRadius = UDim.new(math.random() > 0.5 and 1 or 0, math.random(0, 8))
+            particleCorner.Parent = particle
+            
+            -- Move in random direction
+            local angle = math.rad(math.random(0, 360))
+            local distance = math.random(100, Config.BlastRadius)
+            local targetX = math.cos(angle) * distance
+            local targetY = math.sin(angle) * distance
+            
+            local particleTween = TweenService:Create(
+                particle,
+                TweenInfo.new(math.random(5, 10) / 10, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+                {
+                    Position = UDim2.new(0.5, targetX, 0.5, targetY),
+                    Size = UDim2.new(0, 0, 0, 0),
+                    BackgroundTransparency = 1,
+                    Rotation = math.random(180, 720)
+                }
+            )
+            particleTween:Play()
+            
+            particleTween.Completed:Connect(function()
+                particle:Destroy()
+            end)
+        end
+        
+        -- Initial GUI setup (everything invisible and offset)
+        for i, item in ipairs(animatableElements) do
+            local element = item.element
+            
+            -- Store the original position
+            local originalPosition = item.initialPosition
+            
+            -- Set the element properties to "pre-animation" state
+            if element:IsA("Frame") or element:IsA("TextButton") or element:IsA("TextLabel") or element:IsA("ImageLabel") or element:IsA("ScrollingFrame") then
+                -- Set high transparency
+                if element:IsA("TextLabel") or element:IsA("TextButton") then
+                    element.TextTransparency = 1
+                end
+                
+                if element:IsA("ImageLabel") then
+                    element.ImageTransparency = 1
+                end
+                
+                -- Don't make MainPanel transparent
+                if element ~= MainPanel then
+                    element.BackgroundTransparency = 1
+                else
+                    -- Make MainPanel a bit transparent during animation
+                    element.BackgroundTransparency = 0.9
+                end
+                
+                -- If it's the main panel, make it start with a super cool effect
+                if element == MainPanel then
+                    -- Start tiny and rotate
+                    element.Size = UDim2.new(0, 0, 0, 0)
+                    element.AnchorPoint = Vector2.new(0.5, 0.5)
+                    element.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    element.Rotation = Config.SpinAmount -- Start with a high rotation value
+                else
+                    -- For other elements, place them way off-screen in random directions
+                    local angle = math.random() * math.pi * 2
+                    local distance = math.random(300, Config.BlastRadius)
+                    
+                    local offsetX = math.cos(angle) * distance
+                    local offsetY = math.sin(angle) * distance
+                    
+                    local newPosition = UDim2.new(
+                        0.5, offsetX,
+                        0.5, offsetY
+                    )
+                    element.Position = newPosition
+                    
+                    -- Scale down and rotate elements
+                    local originalSize = element.Size
+                    element.Size = UDim2.new(
+                        originalSize.X.Scale * 0.1,
+                        originalSize.X.Offset * 0.1,
+                        originalSize.Y.Scale * 0.1,
+                        originalSize.Y.Offset * 0.1
+                    )
+                    
+                    -- Apply intense rotation
+                    element.Rotation = math.random(-Config.SpinAmount, Config.SpinAmount)
+                end
+            end
+        end
+        
+        -- Allow a quick frame to render the initial state
+        task.wait(0.1)
+        
+        -- Create ripple wave effects
+        for i = 1, Config.RippleCount do
+            task.delay(i * 0.15, function()
+                local ripple = Instance.new("Frame")
+                ripple.Name = "Ripple" .. i
+                ripple.Size = UDim2.new(0, 0, 0, 0)
+                ripple.Position = UDim2.new(0.5, 0, 0.5, 0)
+                ripple.AnchorPoint = Vector2.new(0.5, 0.5)
+                ripple.BackgroundColor3 = Config.PanelBorderColor
+                ripple.BackgroundTransparency = 0.7
+                ripple.BorderSizePixel = 0
+                ripple.ZIndex = 90
+                ripple.Parent = ScreenGui
+                
+                -- Make it circular
+                local rippleCorner = Instance.new("UICorner")
+                rippleCorner.CornerRadius = UDim.new(1, 0)
+                rippleCorner.Parent = ripple
+                
+                -- Animate ripple expansion
+                local rippleTween = TweenService:Create(
+                    ripple,
+                    TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+                    {
+                        Size = UDim2.new(0, 600 * (i / Config.RippleCount) * 1.5, 0, 600 * (i / Config.RippleCount) * 1.5),
+                        BackgroundTransparency = 1
+                    }
+                )
+                rippleTween:Play()
+                
+                rippleTween.Completed:Connect(function()
+                    ripple:Destroy()
+                end)
+            end)
+        end
+        
+        -- Main panel spectacular animation sequence
+        task.delay(0.5, function()
+            -- Create a complex sequence for the main panel
+            
+            -- First, explosive growth with rotation
+            local explosiveGrowthTween = TweenService:Create(
+                MainPanel,
+                TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                {
+                    Size = UDim2.new(
+                        0, Config.PanelSize.X.Offset * Config.ElementBounceMultiplier * 1.2,
+                        0, Config.PanelSize.Y.Offset * Config.ElementBounceMultiplier * 1.2
+                    ),
+                    BackgroundTransparency = Config.PanelTransparency + 0.3,
+                    Rotation = 0
+                }
+            )
+            
+            -- Then pulse effect
+            local function createPulseSequence()
+                -- Grow slightly
+                local growTween = TweenService:Create(
+                    MainPanel,
+                    TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+                    {
+                        Size = UDim2.new(
+                            0, Config.PanelSize.X.Offset * Config.PulseSize,
+                            0, Config.PanelSize.Y.Offset * Config.PulseSize
+                        )
+                    }
+                )
+                
+                -- Shrink back
+                local shrinkTween = TweenService:Create(
+                    MainPanel,
+                    TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                    {
+                        Size = Config.PanelSize
+                    }
+                )
+                
+                -- Move to final position
+                local positionTween = TweenService:Create(
+                    MainPanel,
+                    TweenInfo.new(0.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out),
+                    {
+                        Position = Config.InitialPosition,
+                        AnchorPoint = Vector2.new(0, 0)
+                    }
+                )
+                
+                -- Create the sequence
+                growTween:Play()
+                growTween.Completed:Connect(function()
+                    shrinkTween:Play()
+                    shrinkTween.Completed:Connect(function()
+                        positionTween:Play()
+                    end)
+                end)
+            end
+            
+            -- Play the explosive growth
+            explosiveGrowthTween:Play()
+            explosiveGrowthTween.Completed:Connect(function()
+                createPulseSequence()
+                
+                -- Create a colored flash effect
+                local flash = Instance.new("Frame")
+                flash.Name = "ColorFlash"
+                flash.Size = UDim2.new(1, 0, 1, 0)
+                flash.Position = UDim2.new(0, 0, 0, 0)
+                flash.BackgroundColor3 = Config.PanelBorderColor
+                flash.BackgroundTransparency = 0.7
+                flash.BorderSizePixel = 0
+                flash.ZIndex = 5
+                flash.Parent = MainPanel
+                
+                local flashTween = TweenService:Create(
+                    flash,
+                    TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    {BackgroundTransparency = 1}
+                )
+                flashTween:Play()
+                
+                flashTween.Completed:Connect(function()
+                    flash:Destroy()
+                end)
+            end)
+        end)
+        
+        -- Animate each element with staggered timing and fancy effects
+        for i, item in ipairs(animatableElements) do
+            local element = item.element
+            local originalPosition = item.initialPosition
+            
+            -- Skip MainPanel as it's handled separately
+            if element == MainPanel then
+                continue
+            end
+            
+            -- Calculate delay based on element order with some randomization
+            local delay = 0.8 + (i - 1) * Config.ElementSpawnDelay + (math.random() * 0.1)
+            
+            task.delay(delay, function()
+                -- Create path animation for elements (fly in along curved path)
+                local waypoints = {}
+                local numPoints = 5
+                
+                -- Starting point (current position)
+                local startPosition = element.Position
+                
+                -- End position (original position)
+                local endPosition = originalPosition
+                
+                -- Create waypoints for a curved path
+                for j = 1, numPoints do
+                    local progress = j / numPoints
+                    
+                    -- Lerp between start and end positions
+                    local lerpX = startPosition.X.Offset + (endPosition.X.Offset - startPosition.X.Offset) * progress
+                    local lerpY = startPosition.Y.Offset + (endPosition.Y.Offset - startPosition.Y.Offset) * progress
+                    
+                    -- Add some curve to the path (sine wave)
+                    local curveY = math.sin(progress * math.pi) * 50
+                    local curveX = math.cos(progress * math.pi * 2) * 20
+                    
+                    waypoints[j] = UDim2.new(
+                        endPosition.X.Scale, 
+                        lerpX + curveX,
+                        endPosition.Y.Scale, 
+                        lerpY - curveY
+                    )
+                end
+                
+                -- Add final point
+                waypoints[numPoints + 1] = endPosition
+                
+                -- Create multiple tweens for the curved motion
+                local function animateAlongPath()
+                    for j = 1, #waypoints do
+                        local tweenInfo = TweenInfo.new(
+                            0.1, 
+                            j == #waypoints and Enum.EasingStyle.Bounce or Enum.EasingStyle.Quad, 
+                            j == #waypoints and Enum.EasingDirection.Out or Enum.EasingDirection.InOut
+                        )
+                        
+                        local pathTween = TweenService:Create(
+                            element,
+                            tweenInfo,
+                            {Position = waypoints[j]}
+                        )
+                        
+                        pathTween:Play()
+                        
+                        -- Wait for this segment to complete before the next one
+                        task.wait(tweenInfo.Time * 0.9)
+                    end
+                end
+                
+                -- Animate size and rotation
+                local originalSize = element.Size
+                local rotationTween = TweenService:Create(
+                    element,
+                    TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                    {
+                        Size = originalSize,
+                        Rotation = 0,
+                        BackgroundTransparency = element == TitleBar and 0.2 or 0
+                    }
+                )
+                
+                -- Start path animation in a separate thread
+                task.spawn(animateAlongPath)
+                
+                -- Play size and rotation animation
+                rotationTween:Play()
+                
+                -- Create text and image fade in tweens
+                if element:IsA("TextLabel") or element:IsA("TextButton") then
+                    -- Text appears with typing effect for labels
+                    if element:IsA("TextLabel") and element.Text:len() > 1 then
+                        -- Store original text
+                        local originalText = element.Text
+                        element.Text = ""
+                        element.TextTransparency = 0
+                        
+                        -- Type text character by character
+                        task.spawn(function()
+                            for j = 1, originalText:len() do
+                                element.Text = originalText:sub(1, j)
+                                task.wait(0.02) -- Typing speed
+                            end
+                        end)
+                    else
+                        -- Simple fade for buttons and short text
+                        local textTween = TweenService:Create(
+                            element,
+                            TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                            {TextTransparency = 0}
+                        )
+                        textTween:Play()
+                    end
+                end
+                
+                if element:IsA("ImageLabel") then
+                    local imageTween = TweenService:Create(
+                        element,
+                        TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                        {ImageTransparency = element == GlowEffect and 0.6 or 0}
+                    )
+                    imageTween:Play()
+                end
+            end)
+        end
+        
+        -- Add a shimmer effect to the border after everything appears
+        task.delay(3, function()
+            -- Create multiple shimmer effects that loop around the frame
+            for i = 1, 3 do
+                task.delay((i-1) * 0.3, function()
+                    -- Create a shimmer effect
+                    local shimmer = Instance.new("Frame")
+                    shimmer.Name = "BorderShimmer" .. i
+                    shimmer.Size = UDim2.new(0, 5, 1, 0)
+                    shimmer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    shimmer.BackgroundTransparency = 0.6
+                    shimmer.BorderSizePixel = 0
+                    shimmer.ZIndex = 10
+                    shimmer.Parent = MainPanel
+                    
+                    -- Create gradient
+                    local gradient = Instance.new("UIGradient")
+                    gradient.Transparency = NumberSequence.new({
+                        NumberSequenceKeypoint.new(0, 1),
+                        NumberSequenceKeypoint.new(0.4, 0.7),
+                        NumberSequenceKeypoint.new(0.5, 0.3),
+                        NumberSequenceKeypoint.new(0.6, 0.7),
+                        NumberSequenceKeypoint.new(1, 1)
+                    })
+                    gradient.Parent = shimmer
+                    
+                    -- Animate shimmer across the frame
+                    local totalDistance = MainPanel.AbsoluteSize.X + 50
+                    local duration = totalDistance / (50 * Config.ShimmerSpeed)
+                    
+                    local shimmerTween = TweenService:Create(
+                        shimmer,
+                        TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.In),
+                        {Position = UDim2.new(1, 0, 0, 0)}
+                    )
+                    
+                    shimmer.Position = UDim2.new(-0.1, 0, 0, 0)
+                    shimmerTween:Play()
+                    
+                    shimmerTween.Completed:Connect(function()
+                        shimmer:Destroy()
+                    end)
+                end)
+            end
+        end)
+        
+        -- Create persistent glow pulse effect
+        task.delay(3.5, function()
+            -- Start a pulsing effect on the glow
+            while task.wait(1) do
+                if not GlowEffect or not GlowEffect.Parent then break end
+                
+                local pulseOut = TweenService:Create(
+                    GlowEffect,
+                    TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                    {
+                        Size = UDim2.new(1, 50, 1, 50),
+                        ImageTransparency = 0.8
+                    }
+                )
+                
+                local pulseIn = TweenService:Create(
+                    GlowEffect,
+                    TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                    {
+                        Size = UDim2.new(1, 30, 1, 30),
+                        ImageTransparency = 0.6
+                    }
+                )
+                
+                pulseOut:Play()
+                pulseOut.Completed:Connect(function()
+                    if not GlowEffect or not GlowEffect.Parent then return end
+                    pulseIn:Play()
+                end)
+                
+                task.wait(3)
+            end
+        end)
+    end
+    
+    -- Execute spawn animations
+    PlaySpawnAnimations()
+    
+    return ScreenGui, MinimizeButton, CloseButton
+end
+
+-- Function to check if character is touching a wall
+local function IsCharacterTouchingWall()
+    if not Character or not HumanoidRootPart then return false end
+    
+    -- Check if the character is near a wall
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {Character}
+    
+    -- Check in cardinal directions (forward, backward, left, right)
+    local directions = {
+        Vector3.new(1, 0, 0),   -- Right
+        Vector3.new(-1, 0, 0),  -- Left
+        Vector3.new(0, 0, 1),   -- Forward
+        Vector3.new(0, 0, -1),  -- Backward
+    }
+    
+    for _, direction in pairs(directions) do
+        local result = workspace:Raycast(HumanoidRootPart.Position, direction * Config.WallCheckDistance, raycastParams)
+        if result then
+            return true, direction
+        end
+    end
+    
+    return false
+end
+
+-- Function to handle WallHop and InfJump
+local function HandleWallHop(withInfJump, useFlick)
+    if not Character or not Humanoid or not HumanoidRootPart then return end
+    
+    local onWall, wallDirection = IsCharacterTouchingWall()
+    
+    -- If we're on a wall and trying to jump
+    if onWall then
+        -- Direction to turn (opposite of wall direction)
+        local turnDirection = -wallDirection
+        
+        -- Get player's movement direction
+        local moveDirection = Humanoid.MoveDirection
+        
+        -- If player is moving, prioritize their movement direction
+        if moveDirection.Magnitude > 0.1 then
+            if moveDirection.X > 0.1 then
+                -- Moving right
+                turnDirection = Vector3.new(1, 0, 0)
+            elseif moveDirection.X < -0.1 then
+                -- Moving left
+                turnDirection = Vector3.new(-1, 0, 0)
+            end
+        end
+        
+        -- Apply the turn based on method
+        if useFlick then
+            -- For WallFlick, change camera CFrame (only works with ShiftLock)
+            local camera = workspace.CurrentCamera
+            if camera then
+                local forward = HumanoidRootPart.CFrame.LookVector
+                local right = forward:Cross(Vector3.new(0, 1, 0))
+                
+                -- Determine the direction to face
+                local targetCFrame
+                if turnDirection.X > 0 then
+                    -- Turn right
+                    targetCFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + right)
+                else
+                    -- Turn left
+                    targetCFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position - right)
+                end
+                
+                -- Tween the camera
+                local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                local cameraTween = TweenService:Create(camera, tweenInfo, {CFrame = targetCFrame})
+                cameraTween:Play()
+                
+                -- Turn back after a delay
+                task.delay(Config.TurnDuration, function()
+                    local resetTween = TweenService:Create(camera, tweenInfo, {CFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + forward)})
+                    resetTween:Play()
+                end)
+            end
+        else
+            -- For WallHop, rotate the character
+            local newCFrame = CFrame.lookAt(
+                HumanoidRootPart.Position,
+                HumanoidRootPart.Position + turnDirection
+            )
+            
+            HumanoidRootPart.CFrame = newCFrame
+            
+            -- Turn back forward after a delay
+            task.delay(Config.TurnDuration, function()
+                local forwardCFrame = CFrame.lookAt(
+                    HumanoidRootPart.Position,
+                    HumanoidRootPart.Position + Vector3.new(0, 0, 1)
+                )
+                
+                HumanoidRootPart.CFrame = forwardCFrame
+            end)
+        end
+        
+        -- Apply infinite jump if enabled
+        if withInfJump then
+            Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end
+
+-- Handle player input
+UserInputService.JumpRequest:Connect(function()
+    if not GuiEnabled then return end
+    
+    if WallHopInfJumpEnabled then
+        HandleWallHop(true, false)
+    elseif WallHopEnabled then
+        HandleWallHop(false, false)
+    elseif WallFlickInfJumpEnabled then
+        HandleWallHop(true, true)
+    elseif WallFlickEnabled then
+        HandleWallHop(false, true)
+    end
+end)
+
+-- Update character references when character changes
+Player.CharacterAdded:Connect(function(newCharacter)
+    Character = newCharacter
+    Humanoid = Character:WaitForChild("Humanoid")
+    HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+end)
+
+-- Create the GUI
+local ScreenGui, MinimizeButton, CloseButton = CreateGui()
+
+-- Return the main components for external access if needed
+return {
+    GUI = ScreenGui,
+    MinimizeButton = MinimizeButton,
+    CloseButton = CloseButton,
+    ToggleWallHopInfJump = function(state)
+        WallHopInfJumpEnabled = state
+    end,
+    ToggleWallHop = function(state)
+        WallHopEnabled = state
+    end,
+    ToggleWallFlickInfJump = function(state)
+        WallFlickInfJumpEnabled = state
+    end,
+    ToggleWallFlick = function(state)
+        WallFlickEnabled = state
+    end
+}
