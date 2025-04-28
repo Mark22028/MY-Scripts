@@ -1,0 +1,1588 @@
+--[[
+    Ultimate Mobile & PC Macro Script for Roblox
+    By mark074271
+    
+    Features:
+    - Record, play, pause, and stop macro
+    - Save and load macros
+    - Generate code for recorded macros
+    - Add custom delays
+    - Share macros with others
+    - Mobile-friendly with touch controls
+    - PC keyboard input recording
+    - Pattern selection for common patterns
+    - Custom keybinds support
+    - Draggable GUI
+]]
+
+-- Services
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local GuiService = game:GetService("GuiService")
+
+-- Variables
+local player = Players.LocalPlayer
+local isDragging = false
+local dragInput = nil
+local dragStart = nil
+local startPos = nil
+local isRecording = false
+local isPlaying = false
+local isPaused = false
+local recordedActions = {}
+local currentActionIndex = 1
+local startTime = 0
+local lastActionTime = 0
+local defaultDelay = 0.1 -- Default delay between actions
+local recordMode = "all" -- "touch", "keyboard", "all"
+local isPCUser = UserInputService.KeyboardEnabled
+local isUsingPattern = false
+local selectedPattern = nil
+local customKeybind = Enum.KeyCode.F6 -- Default keybind to start/stop macro
+local keybindEnabled = false
+
+-- Predefined patterns
+local PredefinedPatterns = {
+    {
+        name = "2x1 Grid (Left to Right)",
+        description = "Clicks in a 2x1 grid pattern, left to right",
+        positions = {
+            Vector2.new(0.25, 0.5),
+            Vector2.new(0.75, 0.5)
+        }
+    },
+    {
+        name = "2x2 Grid",
+        description = "Clicks in a 2x2 grid pattern",
+        positions = {
+            Vector2.new(0.25, 0.25),
+            Vector2.new(0.75, 0.25),
+            Vector2.new(0.25, 0.75),
+            Vector2.new(0.75, 0.75)
+        }
+    },
+    {
+        name = "3x3 Grid",
+        description = "Clicks in a 3x3 grid pattern",
+        positions = {
+            Vector2.new(0.167, 0.167),
+            Vector2.new(0.5, 0.167),
+            Vector2.new(0.833, 0.167),
+            Vector2.new(0.167, 0.5),
+            Vector2.new(0.5, 0.5),
+            Vector2.new(0.833, 0.5),
+            Vector2.new(0.167, 0.833),
+            Vector2.new(0.5, 0.833),
+            Vector2.new(0.833, 0.833)
+        }
+    },
+    {
+        name = "Circle (8 points)",
+        description = "Clicks in a circular pattern (8 points)",
+        positions = {
+            Vector2.new(0.5, 0.1),
+            Vector2.new(0.85, 0.25),
+            Vector2.new(0.9, 0.5),
+            Vector2.new(0.85, 0.75),
+            Vector2.new(0.5, 0.9),
+            Vector2.new(0.15, 0.75),
+            Vector2.new(0.1, 0.5),
+            Vector2.new(0.15, 0.25)
+        }
+    },
+    {
+        name = "Zigzag Pattern",
+        description = "Clicks in a zigzag pattern",
+        positions = {
+            Vector2.new(0.1, 0.2),
+            Vector2.new(0.3, 0.4),
+            Vector2.new(0.5, 0.2),
+            Vector2.new(0.7, 0.4),
+            Vector2.new(0.9, 0.2),
+            Vector2.new(0.7, 0.6),
+            Vector2.new(0.5, 0.8),
+            Vector2.new(0.3, 0.6),
+            Vector2.new(0.1, 0.8)
+        }
+    },
+    {
+        name = "Spiral Pattern",
+        description = "Clicks in a spiral pattern",
+        positions = {
+            Vector2.new(0.5, 0.5),
+            Vector2.new(0.6, 0.5),
+            Vector2.new(0.6, 0.4),
+            Vector2.new(0.5, 0.4),
+            Vector2.new(0.4, 0.4),
+            Vector2.new(0.4, 0.5),
+            Vector2.new(0.4, 0.6),
+            Vector2.new(0.5, 0.6),
+            Vector2.new(0.6, 0.6),
+            Vector2.new(0.7, 0.6),
+            Vector2.new(0.7, 0.5),
+            Vector2.new(0.7, 0.4),
+            Vector2.new(0.7, 0.3),
+            Vector2.new(0.6, 0.3),
+            Vector2.new(0.5, 0.3),
+            Vector2.new(0.4, 0.3),
+            Vector2.new(0.3, 0.3),
+            Vector2.new(0.3, 0.4),
+            Vector2.new(0.3, 0.5),
+            Vector2.new(0.3, 0.6),
+            Vector2.new(0.3, 0.7),
+            Vector2.new(0.4, 0.7),
+            Vector2.new(0.5, 0.7),
+            Vector2.new(0.6, 0.7),
+            Vector2.new(0.7, 0.7)
+        }
+    }
+}
+
+-- Configuration
+local Config = {
+    -- Main Panel
+    PanelSize = UDim2.new(0, 300, 0, 200),
+    PanelColor = Color3.fromRGB(30, 30, 30),
+    PanelTransparency = 0.2,
+    PanelBorderColor = Color3.fromRGB(0, 150, 255),
+    PanelCornerRadius = 10,
+    InitialPosition = UDim2.new(0.5, -150, 0.8, -100),
+    
+    -- Buttons
+    ButtonHeight = 40,
+    ButtonSpacing = 5,
+    ButtonCornerRadius = 8,
+    ButtonTextSize = 16,
+    ButtonFont = Enum.Font.GothamSemibold,
+    
+    -- Colors
+    TextColor = Color3.fromRGB(255, 255, 255),
+    RecordColor = Color3.fromRGB(255, 50, 50),
+    PlayColor = Color3.fromRGB(50, 200, 50),
+    PauseColor = Color3.fromRGB(255, 200, 50),
+    StopColor = Color3.fromRGB(150, 150, 150),
+    SaveColor = Color3.fromRGB(50, 150, 255),
+    LoadColor = Color3.fromRGB(100, 100, 255),
+    ShareColor = Color3.fromRGB(180, 100, 255),
+    DelayColor = Color3.fromRGB(255, 150, 50),
+    GenerateColor = Color3.fromRGB(255, 100, 150),
+    
+    -- Animation
+    TweenTime = 0.2,
+    TweenStyle = Enum.EasingStyle.Quart,
+    TweenDirection = Enum.EasingDirection.Out,
+    ButtonHoverScale = 1.05,
+    ButtonPressScale = 0.95,
+    
+    -- Shimmer Effect
+    ShimmerSpeed = 2,
+    ShimmerWidth = 0.1,
+    ShimmerTransparency = 0.7,
+}
+
+-- Create the main GUI
+local function createGui()
+    -- Screen GUI
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "UltimateMacroGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Ignore TopBar inset for mobile
+    if GuiService:IsTenFootInterface() or UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
+        screenGui.IgnoreGuiInset = true
+    end
+    
+    -- Main Panel
+    local mainPanel = Instance.new("Frame")
+    mainPanel.Name = "MainPanel"
+    mainPanel.Size = Config.PanelSize
+    mainPanel.Position = Config.InitialPosition
+    mainPanel.BackgroundColor3 = Config.PanelColor
+    mainPanel.BackgroundTransparency = Config.PanelTransparency
+    mainPanel.BorderSizePixel = 0
+    mainPanel.Active = true
+    mainPanel.Parent = screenGui
+    
+    -- Add corner radius to panel
+    local panelCorner = Instance.new("UICorner")
+    panelCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    panelCorner.Parent = mainPanel
+    
+    -- Add panel border
+    local panelBorder = Instance.new("UIStroke")
+    panelBorder.Color = Config.PanelBorderColor
+    panelBorder.Thickness = 2
+    panelBorder.Parent = mainPanel
+    
+    -- Add drop shadow
+    local dropShadow = Instance.new("ImageLabel")
+    dropShadow.Name = "DropShadow"
+    dropShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    dropShadow.BackgroundTransparency = 1
+    dropShadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    dropShadow.Size = UDim2.new(1, 20, 1, 20)
+    dropShadow.ZIndex = -1
+    dropShadow.Image = "rbxassetid://6014261993"
+    dropShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    dropShadow.ImageTransparency = 0.5
+    dropShadow.ScaleType = Enum.ScaleType.Slice
+    dropShadow.SliceCenter = Rect.new(49, 49, 450, 450)
+    dropShadow.Parent = mainPanel
+    
+    -- Title bar for dragging
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 30)
+    titleBar.Position = UDim2.new(0, 0, 0, 0)
+    titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    titleBar.BackgroundTransparency = 0.5
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainPanel
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    titleCorner.Parent = titleBar
+    
+    -- Title text
+    local titleText = Instance.new("TextLabel")
+    titleText.Name = "TitleText"
+    titleText.Size = UDim2.new(1, -10, 1, 0)
+    titleText.Position = UDim2.new(0, 10, 0, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.TextColor3 = Config.TextColor
+    titleText.TextSize = Config.ButtonTextSize
+    titleText.Font = Config.ButtonFont
+    titleText.Text = "Ultimate Macro"
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.Parent = titleBar
+    
+    -- Status text
+    local statusText = Instance.new("TextLabel")
+    statusText.Name = "StatusText"
+    statusText.Size = UDim2.new(1, -20, 0, 20)
+    statusText.Position = UDim2.new(0, 10, 0, 35)
+    statusText.BackgroundTransparency = 1
+    statusText.TextColor3 = Config.TextColor
+    statusText.TextSize = Config.ButtonTextSize - 2
+    statusText.Font = Config.ButtonFont
+    statusText.Text = "Ready"
+    statusText.TextXAlignment = Enum.TextXAlignment.Left
+    statusText.Parent = mainPanel
+    
+    -- Create the control buttons
+    local buttonContainer = Instance.new("Frame")
+    buttonContainer.Name = "ButtonContainer"
+    buttonContainer.Size = UDim2.new(1, -20, 1, -65)
+    buttonContainer.Position = UDim2.new(0, 10, 0, 55)
+    buttonContainer.BackgroundTransparency = 1
+    buttonContainer.Parent = mainPanel
+    
+    -- Button layouts
+    local buttonLayout = Instance.new("UIListLayout")
+    buttonLayout.Padding = UDim.new(0, Config.ButtonSpacing)
+    buttonLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    buttonLayout.Parent = buttonContainer
+    
+    -- Create function to easily make buttons
+    local function createButton(name, text, color, layoutOrder)
+        local button = Instance.new("TextButton")
+        button.Name = name .. "Button"
+        button.Size = UDim2.new(1, 0, 0, Config.ButtonHeight)
+        button.BackgroundColor3 = color
+        button.TextColor3 = Config.TextColor
+        button.TextSize = Config.ButtonTextSize
+        button.Font = Config.ButtonFont
+        button.Text = text
+        button.LayoutOrder = layoutOrder
+        button.BorderSizePixel = 0
+        button.AutoButtonColor = false
+        button.Parent = buttonContainer
+        
+        -- Add corner radius
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+        corner.Parent = button
+        
+        -- Add shimmer effect for ultimate smoothness
+        local shimmer = Instance.new("Frame")
+        shimmer.Name = "Shimmer"
+        shimmer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        shimmer.BackgroundTransparency = Config.ShimmerTransparency
+        shimmer.BorderSizePixel = 0
+        shimmer.Size = UDim2.new(Config.ShimmerWidth, 0, 2, 0)
+        shimmer.Position = UDim2.new(-Config.ShimmerWidth, 0, -0.5, 0)
+        shimmer.Rotation = 45
+        shimmer.ZIndex = 2
+        shimmer.Parent = button
+        
+        local shimmerTween = TweenService:Create(
+            shimmer, 
+            TweenInfo.new(Config.ShimmerSpeed, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1), 
+            {Position = UDim2.new(1, 0, -0.5, 0)}
+        )
+        shimmerTween:Play()
+        
+        -- Button hover/click effects
+        button.MouseEnter:Connect(function()
+            TweenService:Create(
+                button,
+                TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+                {Size = UDim2.new(1, 0, 0, Config.ButtonHeight * Config.ButtonHoverScale)}
+            ):Play()
+        end)
+        
+        button.MouseLeave:Connect(function()
+            TweenService:Create(
+                button,
+                TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+                {Size = UDim2.new(1, 0, 0, Config.ButtonHeight)}
+            ):Play()
+        end)
+        
+        return button
+    end
+    
+    -- Create the control buttons
+    local recordButton = createButton("Record", "⏺️ Record", Config.RecordColor, 1)
+    local playButton = createButton("Play", "▶️ Play", Config.PlayColor, 2)
+    local pauseButton = createButton("Pause", "⏸️ Pause", Config.PauseColor, 3)
+    local stopButton = createButton("Stop", "⏹️ Stop", Config.StopColor, 4)
+    local saveButton = createButton("Save", "💾 Save", Config.SaveColor, 5)
+    local loadButton = createButton("Load", "📂 Load", Config.LoadColor, 6)
+    local delayButton = createButton("Delay", "⏱️ Set Delay", Config.DelayColor, 7)
+    local shareButton = createButton("Share", "📤 Share", Config.ShareColor, 8)
+    local generateButton = createButton("Generate", "📝 Generate Code", Config.GenerateColor, 9)
+    
+    -- Add buttons for pattern selection and keybind
+    local patternButton = createButton("Pattern", "📊 Select Pattern", Color3.fromRGB(255, 100, 255), 10)
+    local keybindButton = createButton("Keybind", "⌨️ Set Keybind", Color3.fromRGB(100, 200, 255), 11)
+    local recordModeButton = createButton("RecordMode", "📱 Record Mode: All", Color3.fromRGB(100, 150, 200), 12)
+    
+    -- Create delay input dialog
+    local delayDialog = Instance.new("Frame")
+    delayDialog.Name = "DelayDialog"
+    delayDialog.Size = UDim2.new(0, 200, 0, 100)
+    delayDialog.Position = UDim2.new(0.5, -100, 0.5, -50)
+    delayDialog.BackgroundColor3 = Config.PanelColor
+    delayDialog.BackgroundTransparency = 0
+    delayDialog.BorderSizePixel = 0
+    delayDialog.Visible = false
+    delayDialog.ZIndex = 10
+    delayDialog.Parent = screenGui
+    
+    local delayCorner = Instance.new("UICorner")
+    delayCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    delayCorner.Parent = delayDialog
+    
+    local delayTitle = Instance.new("TextLabel")
+    delayTitle.Name = "DelayTitle"
+    delayTitle.Size = UDim2.new(1, 0, 0, 30)
+    delayTitle.Position = UDim2.new(0, 0, 0, 0)
+    delayTitle.BackgroundTransparency = 1
+    delayTitle.TextColor3 = Config.TextColor
+    delayTitle.TextSize = Config.ButtonTextSize
+    delayTitle.Font = Config.ButtonFont
+    delayTitle.Text = "Set Delay (seconds)"
+    delayTitle.ZIndex = 10
+    delayTitle.Parent = delayDialog
+    
+    local delayInput = Instance.new("TextBox")
+    delayInput.Name = "DelayInput"
+    delayInput.Size = UDim2.new(1, -20, 0, 30)
+    delayInput.Position = UDim2.new(0, 10, 0, 35)
+    delayInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    delayInput.TextColor3 = Config.TextColor
+    delayInput.TextSize = Config.ButtonTextSize
+    delayInput.Font = Config.ButtonFont
+    delayInput.Text = tostring(defaultDelay)
+    delayInput.PlaceholderText = "Enter delay in seconds"
+    delayInput.ZIndex = 10
+    delayInput.Parent = delayDialog
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    inputCorner.Parent = delayInput
+    
+    local confirmButton = Instance.new("TextButton")
+    confirmButton.Name = "ConfirmButton"
+    confirmButton.Size = UDim2.new(0.5, -15, 0, 25)
+    confirmButton.Position = UDim2.new(0, 10, 0, 70)
+    confirmButton.BackgroundColor3 = Config.PlayColor
+    confirmButton.TextColor3 = Config.TextColor
+    confirmButton.TextSize = Config.ButtonTextSize - 2
+    confirmButton.Font = Config.ButtonFont
+    confirmButton.Text = "OK"
+    confirmButton.ZIndex = 10
+    confirmButton.BorderSizePixel = 0
+    confirmButton.Parent = delayDialog
+    
+    local confirmCorner = Instance.new("UICorner")
+    confirmCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    confirmCorner.Parent = confirmButton
+    
+    local cancelButton = Instance.new("TextButton")
+    cancelButton.Name = "CancelButton"
+    cancelButton.Size = UDim2.new(0.5, -15, 0, 25)
+    cancelButton.Position = UDim2.new(0.5, 5, 0, 70)
+    cancelButton.BackgroundColor3 = Config.StopColor
+    cancelButton.TextColor3 = Config.TextColor
+    cancelButton.TextSize = Config.ButtonTextSize - 2
+    cancelButton.Font = Config.ButtonFont
+    cancelButton.Text = "Cancel"
+    cancelButton.ZIndex = 10
+    cancelButton.BorderSizePixel = 0
+    cancelButton.Parent = delayDialog
+    
+    local cancelCorner = Instance.new("UICorner")
+    cancelCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    cancelCorner.Parent = cancelButton
+    
+    -- Create code generation dialog
+    local codeDialog = Instance.new("Frame")
+    codeDialog.Name = "CodeDialog"
+    codeDialog.Size = UDim2.new(0, 400, 0, 300)
+    codeDialog.Position = UDim2.new(0.5, -200, 0.5, -150)
+    codeDialog.BackgroundColor3 = Config.PanelColor
+    codeDialog.BackgroundTransparency = 0
+    codeDialog.BorderSizePixel = 0
+    codeDialog.Visible = false
+    codeDialog.ZIndex = 10
+    codeDialog.Parent = screenGui
+    
+    local codeCorner = Instance.new("UICorner")
+    codeCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    codeCorner.Parent = codeDialog
+    
+    local codeTitle = Instance.new("TextLabel")
+    codeTitle.Name = "CodeTitle"
+    codeTitle.Size = UDim2.new(1, 0, 0, 30)
+    codeTitle.Position = UDim2.new(0, 0, 0, 0)
+    codeTitle.BackgroundTransparency = 1
+    codeTitle.TextColor3 = Config.TextColor
+    codeTitle.TextSize = Config.ButtonTextSize
+    codeTitle.Font = Config.ButtonFont
+    codeTitle.Text = "Generated Macro Code"
+    codeTitle.ZIndex = 10
+    codeTitle.Parent = codeDialog
+    
+    local codeTextBox = Instance.new("TextBox")
+    codeTextBox.Name = "CodeTextBox"
+    codeTextBox.Size = UDim2.new(1, -20, 1, -70)
+    codeTextBox.Position = UDim2.new(0, 10, 0, 35)
+    codeTextBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    codeTextBox.TextColor3 = Config.TextColor
+    codeTextBox.TextSize = Config.ButtonTextSize - 4
+    codeTextBox.Font = Enum.Font.Code
+    codeTextBox.Text = "-- No macro recorded yet"
+    codeTextBox.TextXAlignment = Enum.TextXAlignment.Left
+    codeTextBox.TextYAlignment = Enum.TextYAlignment.Top
+    codeTextBox.TextWrapped = true
+    codeTextBox.ClearTextOnFocus = false
+    codeTextBox.MultiLine = true
+    codeTextBox.ZIndex = 10
+    codeTextBox.Parent = codeDialog
+    
+    local textBoxCorner = Instance.new("UICorner")
+    textBoxCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    textBoxCorner.Parent = codeTextBox
+    
+    local closeCodeButton = Instance.new("TextButton")
+    closeCodeButton.Name = "CloseCodeButton"
+    closeCodeButton.Size = UDim2.new(0.5, -15, 0, 25)
+    closeCodeButton.Position = UDim2.new(0.5, -80, 1, -35)
+    closeCodeButton.BackgroundColor3 = Config.StopColor
+    closeCodeButton.TextColor3 = Config.TextColor
+    closeCodeButton.TextSize = Config.ButtonTextSize - 2
+    closeCodeButton.Font = Config.ButtonFont
+    closeCodeButton.Text = "Close"
+    closeCodeButton.ZIndex = 10
+    closeCodeButton.BorderSizePixel = 0
+    closeCodeButton.Parent = codeDialog
+    
+    local closeCodeCorner = Instance.new("UICorner")
+    closeCodeCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    closeCodeCorner.Parent = closeCodeButton
+    
+    -- Create loading dialog
+    local loadDialog = Instance.new("Frame")
+    loadDialog.Name = "LoadDialog"
+    loadDialog.Size = UDim2.new(0, 300, 0, 150)
+    loadDialog.Position = UDim2.new(0.5, -150, 0.5, -75)
+    loadDialog.BackgroundColor3 = Config.PanelColor
+    loadDialog.BackgroundTransparency = 0
+    loadDialog.BorderSizePixel = 0
+    loadDialog.Visible = false
+    loadDialog.ZIndex = 10
+    loadDialog.Parent = screenGui
+    
+    local loadCorner = Instance.new("UICorner")
+    loadCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    loadCorner.Parent = loadDialog
+    
+    local loadTitle = Instance.new("TextLabel")
+    loadTitle.Name = "LoadTitle"
+    loadTitle.Size = UDim2.new(1, 0, 0, 30)
+    loadTitle.Position = UDim2.new(0, 0, 0, 0)
+    loadTitle.BackgroundTransparency = 1
+    loadTitle.TextColor3 = Config.TextColor
+    loadTitle.TextSize = Config.ButtonTextSize
+    loadTitle.Font = Config.ButtonFont
+    loadTitle.Text = "Load Macro"
+    loadTitle.ZIndex = 10
+    loadTitle.Parent = loadDialog
+    
+    local loadInput = Instance.new("TextBox")
+    loadInput.Name = "LoadInput"
+    loadInput.Size = UDim2.new(1, -20, 0, 70)
+    loadInput.Position = UDim2.new(0, 10, 0, 35)
+    loadInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    loadInput.TextColor3 = Config.TextColor
+    loadInput.TextSize = Config.ButtonTextSize - 4
+    loadInput.Font = Enum.Font.Code
+    loadInput.Text = ""
+    loadInput.PlaceholderText = "Paste macro code here"
+    loadInput.TextXAlignment = Enum.TextXAlignment.Left
+    loadInput.TextYAlignment = Enum.TextYAlignment.Top
+    loadInput.TextWrapped = true
+    loadInput.ClearTextOnFocus = false
+    loadInput.MultiLine = true
+    loadInput.ZIndex = 10
+    loadInput.Parent = loadDialog
+    
+    local loadInputCorner = Instance.new("UICorner")
+    loadInputCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    loadInputCorner.Parent = loadInput
+    
+    local loadConfirmButton = Instance.new("TextButton")
+    loadConfirmButton.Name = "LoadConfirmButton"
+    loadConfirmButton.Size = UDim2.new(0.5, -15, 0, 25)
+    loadConfirmButton.Position = UDim2.new(0, 10, 0, 115)
+    loadConfirmButton.BackgroundColor3 = Config.PlayColor
+    loadConfirmButton.TextColor3 = Config.TextColor
+    loadConfirmButton.TextSize = Config.ButtonTextSize - 2
+    loadConfirmButton.Font = Config.ButtonFont
+    loadConfirmButton.Text = "Load"
+    loadConfirmButton.ZIndex = 10
+    loadConfirmButton.BorderSizePixel = 0
+    loadConfirmButton.Parent = loadDialog
+    
+    local loadConfirmCorner = Instance.new("UICorner")
+    loadConfirmCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    loadConfirmCorner.Parent = loadConfirmButton
+    
+    local loadCancelButton = Instance.new("TextButton")
+    loadCancelButton.Name = "LoadCancelButton"
+    loadCancelButton.Size = UDim2.new(0.5, -15, 0, 25)
+    loadCancelButton.Position = UDim2.new(0.5, 5, 0, 115)
+    loadCancelButton.BackgroundColor3 = Config.StopColor
+    loadCancelButton.TextColor3 = Config.TextColor
+    loadCancelButton.TextSize = Config.ButtonTextSize - 2
+    loadCancelButton.Font = Config.ButtonFont
+    loadCancelButton.Text = "Cancel"
+    loadCancelButton.ZIndex = 10
+    loadCancelButton.BorderSizePixel = 0
+    loadCancelButton.Parent = loadDialog
+    
+    local loadCancelCorner = Instance.new("UICorner")
+    loadCancelCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    loadCancelCorner.Parent = loadCancelButton
+    
+    -- Add credit text
+    local creditText = Instance.new("TextLabel")
+    creditText.Name = "CreditText"
+    creditText.Size = UDim2.new(0, 120, 0, 20)
+    creditText.Position = UDim2.new(1, -120, 1, -20)
+    creditText.BackgroundTransparency = 1
+    creditText.TextColor3 = Config.TextColor
+    creditText.TextSize = 12
+    creditText.Font = Enum.Font.Gotham
+    creditText.Text = "By mark074271"
+    creditText.TextXAlignment = Enum.TextXAlignment.Right
+    creditText.Parent = mainPanel
+    
+    -- Create pattern selection dialog
+    local patternDialog = Instance.new("Frame")
+    patternDialog.Name = "PatternDialog"
+    patternDialog.Size = UDim2.new(0, 300, 0, 350)
+    patternDialog.Position = UDim2.new(0.5, -150, 0.5, -175)
+    patternDialog.BackgroundColor3 = Config.PanelColor
+    patternDialog.BackgroundTransparency = 0
+    patternDialog.BorderSizePixel = 0
+    patternDialog.Visible = false
+    patternDialog.ZIndex = 10
+    patternDialog.Parent = screenGui
+    
+    local patternCorner = Instance.new("UICorner")
+    patternCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    patternCorner.Parent = patternDialog
+    
+    local patternTitle = Instance.new("TextLabel")
+    patternTitle.Name = "PatternTitle"
+    patternTitle.Size = UDim2.new(1, 0, 0, 30)
+    patternTitle.Position = UDim2.new(0, 0, 0, 0)
+    patternTitle.BackgroundTransparency = 1
+    patternTitle.TextColor3 = Config.TextColor
+    patternTitle.TextSize = Config.ButtonTextSize
+    patternTitle.Font = Config.ButtonFont
+    patternTitle.Text = "Select Pattern"
+    patternTitle.ZIndex = 10
+    patternTitle.Parent = patternDialog
+    
+    -- Pattern list container
+    local patternContainer = Instance.new("ScrollingFrame")
+    patternContainer.Name = "PatternContainer"
+    patternContainer.Size = UDim2.new(1, -20, 1, -80)
+    patternContainer.Position = UDim2.new(0, 10, 0, 35)
+    patternContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    patternContainer.BorderSizePixel = 0
+    patternContainer.ScrollBarThickness = 4
+    patternContainer.ScrollingDirection = Enum.ScrollingDirection.Y
+    patternContainer.CanvasSize = UDim2.new(0, 0, 0, #PredefinedPatterns * 70) -- Adjust based on number of patterns
+    patternContainer.ZIndex = 10
+    patternContainer.Parent = patternDialog
+    
+    local patternContainerCorner = Instance.new("UICorner")
+    patternContainerCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    patternContainerCorner.Parent = patternContainer
+    
+    -- Add pattern buttons
+    for i, pattern in ipairs(PredefinedPatterns) do
+        local patternButton = Instance.new("TextButton")
+        patternButton.Name = "Pattern_" .. i
+        patternButton.Size = UDim2.new(1, -20, 0, 60)
+        patternButton.Position = UDim2.new(0, 10, 0, (i-1) * 70 + 10)
+        patternButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        patternButton.TextColor3 = Config.TextColor
+        patternButton.TextSize = Config.ButtonTextSize - 2
+        patternButton.Font = Config.ButtonFont
+        patternButton.Text = pattern.name
+        patternButton.TextXAlignment = Enum.TextXAlignment.Center
+        patternButton.ZIndex = 10
+        patternButton.BorderSizePixel = 0
+        patternButton.Parent = patternContainer
+        
+        local patternButtonCorner = Instance.new("UICorner")
+        patternButtonCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+        patternButtonCorner.Parent = patternButton
+        
+        -- Description label
+        local descriptionLabel = Instance.new("TextLabel")
+        descriptionLabel.Name = "Description"
+        descriptionLabel.Size = UDim2.new(1, -20, 0, 20)
+        descriptionLabel.Position = UDim2.new(0, 10, 0.7, 0)
+        descriptionLabel.BackgroundTransparency = 1
+        descriptionLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        descriptionLabel.TextSize = Config.ButtonTextSize - 4
+        descriptionLabel.Font = Enum.Font.Gotham
+        descriptionLabel.Text = pattern.description
+        descriptionLabel.TextXAlignment = Enum.TextXAlignment.Center
+        descriptionLabel.TextWrapped = true
+        descriptionLabel.ZIndex = 10
+        descriptionLabel.Parent = patternButton
+        
+        -- Pattern selection logic
+        patternButton.MouseButton1Click:Connect(function()
+            selectedPattern = pattern
+            isUsingPattern = true
+            updateStatus("Pattern selected: " .. pattern.name, Color3.fromRGB(255, 100, 255))
+            patternDialog.Visible = false
+        end)
+    end
+    
+    -- Close pattern dialog button
+    local closePatternButton = Instance.new("TextButton")
+    closePatternButton.Name = "ClosePatternButton"
+    closePatternButton.Size = UDim2.new(0.5, -15, 0, 25)
+    closePatternButton.Position = UDim2.new(0.25, 0, 1, -35)
+    closePatternButton.BackgroundColor3 = Config.StopColor
+    closePatternButton.TextColor3 = Config.TextColor
+    closePatternButton.TextSize = Config.ButtonTextSize - 2
+    closePatternButton.Font = Config.ButtonFont
+    closePatternButton.Text = "Cancel"
+    closePatternButton.ZIndex = 10
+    closePatternButton.BorderSizePixel = 0
+    closePatternButton.Parent = patternDialog
+    
+    local closePatternCorner = Instance.new("UICorner")
+    closePatternCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    closePatternCorner.Parent = closePatternButton
+    
+    -- Create keybind setting dialog
+    local keybindDialog = Instance.new("Frame")
+    keybindDialog.Name = "KeybindDialog"
+    keybindDialog.Size = UDim2.new(0, 300, 0, 200)
+    keybindDialog.Position = UDim2.new(0.5, -150, 0.5, -100)
+    keybindDialog.BackgroundColor3 = Config.PanelColor
+    keybindDialog.BackgroundTransparency = 0
+    keybindDialog.BorderSizePixel = 0
+    keybindDialog.Visible = false
+    keybindDialog.ZIndex = 10
+    keybindDialog.Parent = screenGui
+    
+    local keybindCorner = Instance.new("UICorner")
+    keybindCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    keybindCorner.Parent = keybindDialog
+    
+    local keybindTitle = Instance.new("TextLabel")
+    keybindTitle.Name = "KeybindTitle"
+    keybindTitle.Size = UDim2.new(1, 0, 0, 30)
+    keybindTitle.Position = UDim2.new(0, 0, 0, 0)
+    keybindTitle.BackgroundTransparency = 1
+    keybindTitle.TextColor3 = Config.TextColor
+    keybindTitle.TextSize = Config.ButtonTextSize
+    keybindTitle.Font = Config.ButtonFont
+    keybindTitle.Text = "Set Keybind"
+    keybindTitle.ZIndex = 10
+    keybindTitle.Parent = keybindDialog
+    
+    local keybindInstructions = Instance.new("TextLabel")
+    keybindInstructions.Name = "KeybindInstructions"
+    keybindInstructions.Size = UDim2.new(1, -20, 0, 40)
+    keybindInstructions.Position = UDim2.new(0, 10, 0, 35)
+    keybindInstructions.BackgroundTransparency = 1
+    keybindInstructions.TextColor3 = Config.TextColor
+    keybindInstructions.TextSize = Config.ButtonTextSize - 2
+    keybindInstructions.Font = Config.ButtonFont
+    keybindInstructions.Text = "Press any key to set as your macro keybind"
+    keybindInstructions.TextWrapped = true
+    keybindInstructions.ZIndex = 10
+    keybindInstructions.Parent = keybindDialog
+    
+    local currentKeybind = Instance.new("TextLabel")
+    currentKeybind.Name = "CurrentKeybind"
+    currentKeybind.Size = UDim2.new(1, -20, 0, 40)
+    currentKeybind.Position = UDim2.new(0, 10, 0, 80)
+    currentKeybind.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    currentKeybind.TextColor3 = Config.TextColor
+    currentKeybind.TextSize = Config.ButtonTextSize
+    currentKeybind.Font = Config.ButtonFont
+    currentKeybind.Text = "Current: " .. customKeybind.Name
+    currentKeybind.ZIndex = 10
+    currentKeybind.Parent = keybindDialog
+    
+    local currentKeybindCorner = Instance.new("UICorner")
+    currentKeybindCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    currentKeybindCorner.Parent = currentKeybind
+    
+    local keybindToggle = Instance.new("TextButton")
+    keybindToggle.Name = "KeybindToggle"
+    keybindToggle.Size = UDim2.new(1, -20, 0, 30)
+    keybindToggle.Position = UDim2.new(0, 10, 0, 130)
+    keybindToggle.BackgroundColor3 = keybindEnabled and Config.PlayColor or Config.StopColor
+    keybindToggle.TextColor3 = Config.TextColor
+    keybindToggle.TextSize = Config.ButtonTextSize - 2
+    keybindToggle.Font = Config.ButtonFont
+    keybindToggle.Text = keybindEnabled and "Keybind: Enabled" or "Keybind: Disabled"
+    keybindToggle.ZIndex = 10
+    keybindToggle.BorderSizePixel = 0
+    keybindToggle.Parent = keybindDialog
+    
+    local keybindToggleCorner = Instance.new("UICorner")
+    keybindToggleCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    keybindToggleCorner.Parent = keybindToggle
+    
+    local closeKeybindButton = Instance.new("TextButton")
+    closeKeybindButton.Name = "CloseKeybindButton"
+    closeKeybindButton.Size = UDim2.new(0.5, -15, 0, 25)
+    closeKeybindButton.Position = UDim2.new(0.25, 0, 1, -35)
+    closeKeybindButton.BackgroundColor3 = Config.StopColor
+    closeKeybindButton.TextColor3 = Config.TextColor
+    closeKeybindButton.TextSize = Config.ButtonTextSize - 2
+    closeKeybindButton.Font = Config.ButtonFont
+    closeKeybindButton.Text = "Close"
+    closeKeybindButton.ZIndex = 10
+    closeKeybindButton.BorderSizePixel = 0
+    closeKeybindButton.Parent = keybindDialog
+    
+    local closeKeybindCorner = Instance.new("UICorner")
+    closeKeybindCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    closeKeybindCorner.Parent = closeKeybindButton
+    
+    -- Create record mode dialog
+    local recordModeDialog = Instance.new("Frame")
+    recordModeDialog.Name = "RecordModeDialog"
+    recordModeDialog.Size = UDim2.new(0, 300, 0, 200)
+    recordModeDialog.Position = UDim2.new(0.5, -150, 0.5, -100)
+    recordModeDialog.BackgroundColor3 = Config.PanelColor
+    recordModeDialog.BackgroundTransparency = 0
+    recordModeDialog.BorderSizePixel = 0
+    recordModeDialog.Visible = false
+    recordModeDialog.ZIndex = 10
+    recordModeDialog.Parent = screenGui
+    
+    local recordModeCorner = Instance.new("UICorner")
+    recordModeCorner.CornerRadius = UDim.new(0, Config.PanelCornerRadius)
+    recordModeCorner.Parent = recordModeDialog
+    
+    local recordModeTitle = Instance.new("TextLabel")
+    recordModeTitle.Name = "RecordModeTitle"
+    recordModeTitle.Size = UDim2.new(1, 0, 0, 30)
+    recordModeTitle.Position = UDim2.new(0, 0, 0, 0)
+    recordModeTitle.BackgroundTransparency = 1
+    recordModeTitle.TextColor3 = Config.TextColor
+    recordModeTitle.TextSize = Config.ButtonTextSize
+    recordModeTitle.Font = Config.ButtonFont
+    recordModeTitle.Text = "Select Record Mode"
+    recordModeTitle.ZIndex = 10
+    recordModeTitle.Parent = recordModeDialog
+    
+    -- Record mode buttons
+    local allModeButton = Instance.new("TextButton")
+    allModeButton.Name = "AllModeButton"
+    allModeButton.Size = UDim2.new(1, -20, 0, 40)
+    allModeButton.Position = UDim2.new(0, 10, 0, 40)
+    allModeButton.BackgroundColor3 = recordMode == "all" and Config.PlayColor or Color3.fromRGB(60, 60, 60)
+    allModeButton.TextColor3 = Config.TextColor
+    allModeButton.TextSize = Config.ButtonTextSize - 2
+    allModeButton.Font = Config.ButtonFont
+    allModeButton.Text = "Record All Input (Touch & Keyboard)"
+    allModeButton.ZIndex = 10
+    allModeButton.BorderSizePixel = 0
+    allModeButton.Parent = recordModeDialog
+    
+    local allModeCorner = Instance.new("UICorner")
+    allModeCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    allModeCorner.Parent = allModeButton
+    
+    local touchModeButton = Instance.new("TextButton")
+    touchModeButton.Name = "TouchModeButton"
+    touchModeButton.Size = UDim2.new(1, -20, 0, 40)
+    touchModeButton.Position = UDim2.new(0, 10, 0, 90)
+    touchModeButton.BackgroundColor3 = recordMode == "touch" and Config.PlayColor or Color3.fromRGB(60, 60, 60)
+    touchModeButton.TextColor3 = Config.TextColor
+    touchModeButton.TextSize = Config.ButtonTextSize - 2
+    touchModeButton.Font = Config.ButtonFont
+    touchModeButton.Text = "Record Touch Input Only"
+    touchModeButton.ZIndex = 10
+    touchModeButton.BorderSizePixel = 0
+    touchModeButton.Parent = recordModeDialog
+    
+    local touchModeCorner = Instance.new("UICorner")
+    touchModeCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    touchModeCorner.Parent = touchModeButton
+    
+    local keyboardModeButton = Instance.new("TextButton")
+    keyboardModeButton.Name = "KeyboardModeButton"
+    keyboardModeButton.Size = UDim2.new(1, -20, 0, 40)
+    keyboardModeButton.Position = UDim2.new(0, 10, 0, 140)
+    keyboardModeButton.BackgroundColor3 = recordMode == "keyboard" and Config.PlayColor or Color3.fromRGB(60, 60, 60)
+    keyboardModeButton.TextColor3 = Config.TextColor
+    keyboardModeButton.TextSize = Config.ButtonTextSize - 2
+    keyboardModeButton.Font = Config.ButtonFont
+    keyboardModeButton.Text = "Record Keyboard Input Only"
+    keyboardModeButton.ZIndex = 10
+    keyboardModeButton.BorderSizePixel = 0
+    keyboardModeButton.Parent = recordModeDialog
+    
+    local keyboardModeCorner = Instance.new("UICorner")
+    keyboardModeCorner.CornerRadius = UDim.new(0, Config.ButtonCornerRadius)
+    keyboardModeCorner.Parent = keyboardModeButton
+    
+    return {
+        ScreenGui = screenGui,
+        MainPanel = mainPanel,
+        TitleBar = titleBar,
+        StatusText = statusText,
+        RecordButton = recordButton,
+        PlayButton = playButton,
+        PauseButton = pauseButton,
+        StopButton = stopButton,
+        SaveButton = saveButton,
+        LoadButton = loadButton,
+        DelayButton = delayButton,
+        ShareButton = shareButton,
+        GenerateButton = generateButton,
+        PatternButton = patternButton,
+        KeybindButton = keybindButton,
+        RecordModeButton = recordModeButton,
+        DelayDialog = delayDialog,
+        DelayInput = delayInput,
+        ConfirmButton = confirmButton,
+        CancelButton = cancelButton,
+        CodeDialog = codeDialog,
+        CodeTextBox = codeTextBox,
+        CloseCodeButton = closeCodeButton,
+        LoadDialog = loadDialog,
+        LoadInput = loadInput,
+        LoadConfirmButton = loadConfirmButton,
+        LoadCancelButton = loadCancelButton,
+        PatternDialog = patternDialog,
+        ClosePatternButton = closePatternButton,
+        KeybindDialog = keybindDialog,
+        CurrentKeybind = currentKeybind,
+        KeybindToggle = keybindToggle,
+        CloseKeybindButton = closeKeybindButton,
+        RecordModeDialog = recordModeDialog,
+        AllModeButton = allModeButton,
+        TouchModeButton = touchModeButton,
+        KeyboardModeButton = keyboardModeButton,
+    }
+end
+
+-- Initialize GUI
+local GUI = createGui()
+
+-- Macro Functions
+local function updateStatus(text, color)
+    GUI.StatusText.Text = text
+    if color then
+        GUI.StatusText.TextColor3 = color
+    else
+        GUI.StatusText.TextColor3 = Config.TextColor
+    end
+end
+
+-- Function to start recording
+local function startRecording()
+    if isPlaying then
+        updateStatus("Stop playback before recording", Config.RecordColor)
+        return
+    end
+    
+    recordedActions = {}
+    isRecording = true
+    isPaused = false
+    startTime = tick()
+    lastActionTime = startTime
+    
+    updateStatus("Recording...", Config.RecordColor)
+    
+    -- Update button appearance
+    TweenService:Create(
+        GUI.RecordButton,
+        TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+        {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}
+    ):Play()
+end
+
+-- Function to record a click action
+local function recordClick(position)
+    if not isRecording then return end
+    
+    local currentTime = tick()
+    local timeSinceLastAction = currentTime - lastActionTime
+    
+    table.insert(recordedActions, {
+        type = "click",
+        position = position,
+        delay = timeSinceLastAction
+    })
+    
+    lastActionTime = currentTime
+    updateStatus("Recorded click at: " .. tostring(position), Config.RecordColor)
+end
+
+-- Function to stop recording
+local function stopRecording()
+    if not isRecording then return end
+    
+    isRecording = false
+    updateStatus("Recording stopped. " .. #recordedActions .. " actions recorded.", nil)
+    
+    -- Reset button appearance
+    TweenService:Create(
+        GUI.RecordButton,
+        TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+        {BackgroundColor3 = Config.RecordColor}
+    ):Play()
+end
+
+-- Function to play recorded actions
+local function playMacro()
+    if isRecording then
+        updateStatus("Stop recording before playback", Config.PlayColor)
+        return
+    end
+    
+    if #recordedActions == 0 then
+        updateStatus("No actions recorded", nil)
+        return
+    end
+    
+    isPlaying = true
+    isPaused = false
+    currentActionIndex = 1
+    
+    updateStatus("Playing macro...", Config.PlayColor)
+    
+    -- Update button appearance
+    TweenService:Create(
+        GUI.PlayButton,
+        TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+        {BackgroundColor3 = Color3.fromRGB(100, 255, 100)}
+    ):Play()
+    
+    -- Start processing actions
+    processNextAction()
+end
+
+-- Function to process the next action in the sequence
+local function processNextAction()
+    if not isPlaying or isPaused or currentActionIndex > #recordedActions then
+        if currentActionIndex > #recordedActions then
+            stopPlayback()
+            updateStatus("Playback complete", nil)
+        end
+        return
+    end
+    
+    local action = recordedActions[currentActionIndex]
+    
+    -- Wait for the specified delay
+    wait(action.delay)
+    
+    -- Perform the action
+    if action.type == "click" then
+        -- Simulate a click at the specified position
+        simulateClick(action.position)
+        updateStatus("Clicked at: " .. tostring(action.position), Config.PlayColor)
+    elseif action.type == "keyboard" then
+        -- Simulate a keypress
+        simulateKeypress(action.keyCode, action.inputState)
+        updateStatus("Key " .. action.keyCode.Name .. " (" .. action.inputState.Name .. ")", Config.PlayColor)
+    end
+    
+    -- Move to the next action
+    currentActionIndex = currentActionIndex + 1
+    
+    -- Process the next action if we're still playing
+    if isPlaying and not isPaused then
+        processNextAction()
+    end
+end
+
+-- Function to simulate a click at a specific position
+local function simulateClick(position)
+    -- Create a virtual input object
+    local virtualInput = {
+        Position = position,
+        KeyCode = Enum.KeyCode.Unknown,
+        UserInputType = Enum.UserInputType.Touch,
+        UserInputState = Enum.UserInputState.Begin
+    }
+    
+    -- Fire touch event to the game
+    UserInputService:ProcessTouchEvent(position.X, position.Y, virtualInput.UserInputState, false, nil, virtualInput.KeyCode)
+    
+    -- Small delay for the touch up event
+    wait(0.05)
+    
+    -- Fire touch ended event
+    virtualInput.UserInputState = Enum.UserInputState.End
+    UserInputService:ProcessTouchEvent(position.X, position.Y, virtualInput.UserInputState, false, nil, virtualInput.KeyCode)
+end
+
+-- Function to simulate a keyboard input
+local function simulateKeypress(keyCode, inputState)
+    -- Make sure the game processes this key press
+    local virtualInput = {
+        KeyCode = keyCode,
+        UserInputType = Enum.UserInputType.Keyboard,
+        UserInputState = inputState
+    }
+    
+    -- Fire key event to the game
+    if inputState == Enum.UserInputState.Begin then
+        UserInputService:ProcessKeyboardInput(true, virtualInput, false)
+    else
+        UserInputService:ProcessKeyboardInput(false, virtualInput, false)
+    end
+end
+
+-- Function to pause playback
+local function pausePlayback()
+    if not isPlaying then return end
+    
+    isPaused = not isPaused
+    
+    if isPaused then
+        updateStatus("Playback paused", Config.PauseColor)
+        
+        -- Update button appearance
+        TweenService:Create(
+            GUI.PauseButton,
+            TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+            {BackgroundColor3 = Color3.fromRGB(255, 255, 100)}
+        ):Play()
+    else
+        updateStatus("Resuming playback...", Config.PlayColor)
+        
+        -- Reset button appearance
+        TweenService:Create(
+            GUI.PauseButton,
+            TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+            {BackgroundColor3 = Config.PauseColor}
+        ):Play()
+        
+        -- Continue processing actions
+        processNextAction()
+    end
+end
+
+-- Function to stop playback
+local function stopPlayback()
+    if not isPlaying and not isRecording then return end
+    
+    isPlaying = false
+    isPaused = false
+    isRecording = false
+    
+    updateStatus("Stopped", nil)
+    
+    -- Reset button appearances
+    TweenService:Create(
+        GUI.RecordButton,
+        TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+        {BackgroundColor3 = Config.RecordColor}
+    ):Play()
+    
+    TweenService:Create(
+        GUI.PlayButton,
+        TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+        {BackgroundColor3 = Config.PlayColor}
+    ):Play()
+    
+    TweenService:Create(
+        GUI.PauseButton,
+        TweenInfo.new(Config.TweenTime, Config.TweenStyle, Config.TweenDirection),
+        {BackgroundColor3 = Config.PauseColor}
+    ):Play()
+end
+
+-- Function to save the recorded macro
+local function saveMacro()
+    if #recordedActions == 0 then
+        updateStatus("No actions to save", nil)
+        return
+    end
+    
+    -- Convert the recorded actions to a JSON string
+    local macroData = HttpService:JSONEncode(recordedActions)
+    
+    -- Show the code dialog with the encoded data
+    GUI.CodeTextBox.Text = macroData
+    GUI.CodeDialog.Visible = true
+    
+    updateStatus("Macro saved! Copy the code to share or load later.", Config.SaveColor)
+end
+
+-- Function to load a macro
+local function showLoadDialog()
+    GUI.LoadDialog.Visible = true
+end
+
+-- Function to load a macro from code
+local function loadMacroFromCode()
+    local codeText = GUI.LoadInput.Text
+    
+    if codeText == "" then
+        updateStatus("No code entered", nil)
+        return
+    end
+    
+    -- Try to decode the JSON
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(codeText)
+    end)
+    
+    if not success or type(result) ~= "table" then
+        updateStatus("Invalid macro code", Color3.fromRGB(255, 100, 100))
+        return
+    end
+    
+    -- Load the actions
+    recordedActions = result
+    currentActionIndex = 1
+    
+    -- Hide the load dialog
+    GUI.LoadDialog.Visible = false
+    
+    updateStatus("Macro loaded with " .. #recordedActions .. " actions", Config.LoadColor)
+end
+
+-- Function to show delay dialog
+local function showDelayDialog()
+    GUI.DelayInput.Text = tostring(defaultDelay)
+    GUI.DelayDialog.Visible = true
+end
+
+-- Function to set default delay
+local function setDefaultDelay()
+    local delayText = GUI.DelayInput.Text
+    local newDelay = tonumber(delayText)
+    
+    if not newDelay or newDelay < 0 then
+        updateStatus("Invalid delay value", Color3.fromRGB(255, 100, 100))
+        return
+    end
+    
+    defaultDelay = newDelay
+    GUI.DelayDialog.Visible = false
+    
+    updateStatus("Default delay set to " .. defaultDelay .. " seconds", Config.DelayColor)
+end
+
+-- Function to share the macro
+local function shareMacro()
+    if #recordedActions == 0 then
+        updateStatus("No actions to share", nil)
+        return
+    end
+    
+    -- Convert the recorded actions to a JSON string
+    local macroData = HttpService:JSONEncode(recordedActions)
+    
+    -- Show the code dialog with the encoded data
+    GUI.CodeTextBox.Text = macroData
+    GUI.CodeDialog.Visible = true
+    
+    updateStatus("Copy the code to share your macro!", Config.ShareColor)
+end
+
+-- Function to generate lua code
+local function generateCode()
+    if #recordedActions == 0 then
+        updateStatus("No actions to generate code for", nil)
+        return
+    end
+    
+    -- Check if we have keyboard actions
+    local hasKeyboardActions = false
+    for _, action in ipairs(recordedActions) do
+        if action.type == "keyboard" then
+            hasKeyboardActions = true
+            break
+        end
+    end
+    
+    local codeLines = {
+        "-- Generated Macro Code",
+        "-- By mark074271's Ultimate Macro",
+        "-- Generated on " .. os.date("%Y-%m-%d %H:%M:%S"),
+        "",
+        "local function runMacro()",
+        "    -- Services",
+        "    local UserInputService = game:GetService(\"UserInputService\")",
+        "",
+    }
+    
+    -- Add device check based on input types
+    if hasKeyboardActions then
+        table.insert(codeLines, "    -- This macro includes keyboard inputs")
+    else
+        table.insert(codeLines, "    -- Check if we're on a mobile device")
+        table.insert(codeLines, "    if not UserInputService.TouchEnabled then")
+        table.insert(codeLines, "        warn(\"This macro is designed for mobile devices only!\")")
+        table.insert(codeLines, "        return")
+        table.insert(codeLines, "    end")
+    end
+    
+    table.insert(codeLines, "")
+    table.insert(codeLines, "    -- Function to simulate a click")
+    table.insert(codeLines, "    local function simulateClick(x, y)")
+    table.insert(codeLines, "        local position = Vector2.new(x, y)")
+    table.insert(codeLines, "        UserInputService:ProcessTouchEvent(x, y, Enum.UserInputState.Begin, false, nil, Enum.KeyCode.Unknown)")
+    table.insert(codeLines, "        wait(0.05) -- Short press duration")
+    table.insert(codeLines, "        UserInputService:ProcessTouchEvent(x, y, Enum.UserInputState.End, false, nil, Enum.KeyCode.Unknown)")
+    table.insert(codeLines, "    end")
+    table.insert(codeLines, "")
+    
+    -- Add keyboard function if needed
+    if hasKeyboardActions then
+        table.insert(codeLines, "    -- Function to simulate a keyboard input")
+        table.insert(codeLines, "    local function simulateKeypress(keyCode, isPressed)")
+        table.insert(codeLines, "        local inputState = isPressed and Enum.UserInputState.Begin or Enum.UserInputState.End")
+        table.insert(codeLines, "        if isPressed then")
+        table.insert(codeLines, "            UserInputService:ProcessKeyboardInput(true, {KeyCode = keyCode, UserInputState = inputState}, false)")
+        table.insert(codeLines, "        else")
+        table.insert(codeLines, "            UserInputService:ProcessKeyboardInput(false, {KeyCode = keyCode, UserInputState = inputState}, false)")
+        table.insert(codeLines, "        end")
+        table.insert(codeLines, "    end")
+        table.insert(codeLines, "")
+    end
+    
+    table.insert(codeLines, "    -- Macro actions sequence")
+    
+    -- Add each recorded action
+    for i, action in ipairs(recordedActions) do
+        table.insert(codeLines, string.format("    wait(%s) -- Delay before action", tostring(action.delay)))
+        
+        if action.type == "click" then
+            table.insert(codeLines, string.format("    simulateClick(%s, %s) -- Click position", 
+                tostring(action.position.X), tostring(action.position.Y)))
+        elseif action.type == "keyboard" then
+            local isPressed = action.inputState == Enum.UserInputState.Begin
+            table.insert(codeLines, string.format("    simulateKeypress(Enum.KeyCode.%s, %s) -- Key: %s", 
+                action.keyCode.Name, 
+                isPressed and "true" or "false",
+                action.keyCode.Name))
+        end
+        
+        table.insert(codeLines, "")
+    end
+    
+    -- Add end of function and execution
+    table.insert(codeLines, "    print(\"Macro completed!\")")
+    table.insert(codeLines, "end")
+    table.insert(codeLines, "")
+    table.insert(codeLines, "-- Run the macro")
+    table.insert(codeLines, "runMacro()")
+    
+    -- Join all lines
+    local fullCode = table.concat(codeLines, "\n")
+    
+    -- Show the code dialog
+    GUI.CodeTextBox.Text = fullCode
+    GUI.CodeDialog.Visible = true
+    
+    updateStatus("Code generated! Copy to use elsewhere.", Config.GenerateColor)
+end
+
+-- Set up GUI event handlers
+-- Dragging functionality
+GUI.TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = true
+        dragStart = input.Position
+        startPos = GUI.MainPanel.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isDragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseMovement or 
+        input.UserInputType == Enum.UserInputType.Touch) and isDragging then
+        local delta = input.Position - dragStart
+        GUI.MainPanel.Position = UDim2.new(
+            startPos.X.Scale, 
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale, 
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Button click handlers
+GUI.RecordButton.MouseButton1Click:Connect(function()
+    if isRecording then
+        stopRecording()
+    else
+        startRecording()
+    end
+end)
+
+GUI.PlayButton.MouseButton1Click:Connect(playMacro)
+GUI.PauseButton.MouseButton1Click:Connect(pausePlayback)
+GUI.StopButton.MouseButton1Click:Connect(stopPlayback)
+GUI.SaveButton.MouseButton1Click:Connect(saveMacro)
+GUI.LoadButton.MouseButton1Click:Connect(showLoadDialog)
+GUI.DelayButton.MouseButton1Click:Connect(showDelayDialog)
+GUI.ShareButton.MouseButton1Click:Connect(shareMacro)
+GUI.GenerateButton.MouseButton1Click:Connect(generateCode)
+
+-- Dialog handlers
+GUI.ConfirmButton.MouseButton1Click:Connect(setDefaultDelay)
+GUI.CancelButton.MouseButton1Click:Connect(function()
+    GUI.DelayDialog.Visible = false
+end)
+
+GUI.CloseCodeButton.MouseButton1Click:Connect(function()
+    GUI.CodeDialog.Visible = false
+end)
+
+GUI.LoadConfirmButton.MouseButton1Click:Connect(loadMacroFromCode)
+GUI.LoadCancelButton.MouseButton1Click:Connect(function()
+    GUI.LoadDialog.Visible = false
+end)
+
+-- Function to show pattern selection dialog
+local function showPatternDialog()
+    GUI.PatternDialog.Visible = true
+    updateStatus("Select a pattern to use", Color3.fromRGB(255, 100, 255))
+end
+
+-- Function to show keybind setting dialog
+local function showKeybindDialog()
+    GUI.KeybindDialog.Visible = true
+end
+
+-- Function to toggle keybind functionality
+local function toggleKeybind()
+    keybindEnabled = not keybindEnabled
+    
+    -- Update button appearance
+    GUI.KeybindToggle.BackgroundColor3 = keybindEnabled and Config.PlayColor or Config.StopColor
+    GUI.KeybindToggle.Text = keybindEnabled and "Keybind: Enabled" or "Keybind: Disabled"
+    
+    updateStatus(keybindEnabled and "Keybind enabled: " .. customKeybind.Name or "Keybind disabled", nil)
+end
+
+-- Function to show record mode dialog
+local function showRecordModeDialog()
+    GUI.RecordModeDialog.Visible = true
+end
+
+-- Function to set record mode
+local function setRecordMode(mode)
+    recordMode = mode
+    
+    -- Update button colors in the dialog
+    GUI.AllModeButton.BackgroundColor3 = recordMode == "all" and Config.PlayColor or Color3.fromRGB(60, 60, 60)
+    GUI.TouchModeButton.BackgroundColor3 = recordMode == "touch" and Config.PlayColor or Color3.fromRGB(60, 60, 60)
+    GUI.KeyboardModeButton.BackgroundColor3 = recordMode == "keyboard" and Config.PlayColor or Color3.fromRGB(60, 60, 60)
+    
+    -- Update the record mode button text
+    local modeTexts = {
+        all = "📱⌨️ Record Mode: All",
+        touch = "📱 Record Mode: Touch",
+        keyboard = "⌨️ Record Mode: Keyboard"
+    }
+    GUI.RecordModeButton.Text = modeTexts[recordMode]
+    
+    GUI.RecordModeDialog.Visible = false
+    updateStatus("Record mode set to: " .. recordMode, nil)
+end
+
+-- Function to record a keyboard input action
+local function recordKeyInput(keyCode, inputState)
+    if not isRecording or not (recordMode == "all" or recordMode == "keyboard") then return end
+    
+    local currentTime = tick()
+    local timeSinceLastAction = currentTime - lastActionTime
+    
+    table.insert(recordedActions, {
+        type = "keyboard",
+        keyCode = keyCode,
+        inputState = inputState,
+        delay = timeSinceLastAction
+    })
+    
+    lastActionTime = currentTime
+    updateStatus("Recorded key: " .. keyCode.Name .. " (" .. inputState.Name .. ")", Config.RecordColor)
+end
+
+-- Function to play pattern
+local function playPattern()
+    if isRecording or #recordedActions > 0 then
+        updateStatus("Can't play pattern while recording or with existing actions", nil)
+        return
+    end
+    
+    if not selectedPattern then
+        updateStatus("No pattern selected", nil)
+        return
+    end
+    
+    isPlaying = true
+    isPaused = false
+    
+    updateStatus("Playing pattern: " .. selectedPattern.name, Config.PlayColor)
+    
+    -- Convert screen percentages to actual positions
+    local viewport = workspace.CurrentCamera.ViewportSize
+    
+    -- Create action sequence from pattern
+    recordedActions = {}
+    for i, pos in ipairs(selectedPattern.positions) do
+        local actualPos = Vector2.new(pos.X * viewport.X, pos.Y * viewport.Y)
+        table.insert(recordedActions, {
+            type = "click",
+            position = actualPos,
+            delay = defaultDelay
+        })
+    end
+    
+    -- Start playing
+    currentActionIndex = 1
+    processNextAction()
+end
+
+-- Function to handle keybind actions
+local function handleKeybind(inputObject)
+    if not keybindEnabled then return end
+    
+    if inputObject.KeyCode == customKeybind then
+        if isRecording then
+            stopRecording()
+        elseif isPlaying then
+            stopPlayback()
+        else
+            if isUsingPattern and selectedPattern then
+                playPattern()
+            else
+                startRecording()
+            end
+        end
+    end
+end
+
+-- Input event connections
+-- Touch screen input detection for recording
+UserInputService.TouchTap:Connect(function(touchPositions)
+    if isRecording and not isPlaying and (recordMode == "all" or recordMode == "touch") then
+        for _, position in pairs(touchPositions) do
+            recordClick(position)
+        end
+    end
+end)
+
+-- Keyboard input detection for recording
+UserInputService.InputBegan:Connect(function(inputObject, gameProcessed)
+    -- For keybind functionality
+    if inputObject.UserInputType == Enum.UserInputType.Keyboard then
+        -- If we're in keybind setting mode
+        if GUI.KeybindDialog.Visible then
+            customKeybind = inputObject.KeyCode
+            GUI.CurrentKeybind.Text = "Current: " .. customKeybind.Name
+            updateStatus("Keybind set to: " .. customKeybind.Name, nil)
+            return
+        end
+        
+        -- Handle keybind action
+        handleKeybind(inputObject)
+        
+        -- Record keyboard input if we're recording
+        if isRecording and not isPlaying and (recordMode == "all" or recordMode == "keyboard") and not gameProcessed then
+            recordKeyInput(inputObject.KeyCode, Enum.UserInputState.Begin)
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(inputObject, gameProcessed)
+    if inputObject.UserInputType == Enum.UserInputType.Keyboard then
+        if isRecording and not isPlaying and (recordMode == "all" or recordMode == "keyboard") and not gameProcessed then
+            recordKeyInput(inputObject.KeyCode, Enum.UserInputState.End)
+        end
+    end
+end)
+
+-- Connect button event handlers for the new buttons
+GUI.PatternButton.MouseButton1Click:Connect(showPatternDialog)
+GUI.ClosePatternButton.MouseButton1Click:Connect(function()
+    GUI.PatternDialog.Visible = false
+end)
+
+GUI.KeybindButton.MouseButton1Click:Connect(showKeybindDialog)
+GUI.KeybindToggle.MouseButton1Click:Connect(toggleKeybind)
+GUI.CloseKeybindButton.MouseButton1Click:Connect(function()
+    GUI.KeybindDialog.Visible = false
+end)
+
+GUI.RecordModeButton.MouseButton1Click:Connect(showRecordModeDialog)
+GUI.AllModeButton.MouseButton1Click:Connect(function() setRecordMode("all") end)
+GUI.TouchModeButton.MouseButton1Click:Connect(function() setRecordMode("touch") end)
+GUI.KeyboardModeButton.MouseButton1Click:Connect(function() setRecordMode("keyboard") end)
+
+-- Initialize
+updateStatus("Ultimate Macro ready!", nil)
+print("Ultimate Mobile & PC Macro loaded successfully!")
